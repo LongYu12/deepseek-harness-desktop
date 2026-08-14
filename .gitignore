@@ -1,5 +1,7 @@
 CLAUDE.local.md
 .env
+.github-release-token
+desktop-build-fix.log
 node_modules/
 lib/
 *.tsbuildinfo
