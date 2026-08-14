@@ -7,6 +7,9 @@ packages:
   - native/landlock-run/packages/*
   # Product assemblies over the package tier; apps/cli owns the `dsh` bin.
   - apps/*
+  # The desktop pipeline stages the deployed backend closure here; its copied
+  # package.json must not surface as a workspace member.
+  - '!apps/desktop/backend'
   - website
   # The runnable demo leaves join as ONE workspace member: examples/package.json
   # declares the union of every leaf's cordis.yml plugins as workspace:*, so a
@@ -40,6 +43,8 @@ peerDependencyRules:
 allowBuilds:
   esbuild: true
   lefthook: true
+  # The desktop shell downloads its Electron binaries at install time.
+  electron: true
   # Cross-platform boundary for the persistent PTY backend, including ConPTY on Windows.
   node-pty: true
   # Pulled in by @earendil-works/pi-ai (optional LLM API backend). pnpm lists
@@ -53,6 +58,9 @@ allowBuilds:
   # The Python runtime deploy includes the reviewed workspace postinstall that
   # restores the executable bit on node-pty's macOS spawn helper.
   '@deepseek-ai/dsh-subprocess-local@file:packages/subprocess/subprocess-local': true
+  # electron-builder's Windows winstaller target ships lifecycle scripts; the
+  # desktop pipeline packs NSIS only, so its build script stays denied.
+  electron-winstaller: false
 
 minimumReleaseAgeExclude:
   # Fresh pi-ai releases carry the model catalog updates that are the whole

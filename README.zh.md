@@ -34,6 +34,17 @@ pnpm run build
 pnpm dsh web
 ```
 
+### 桌面应用
+
+桌面应用在原生窗口中承载 Web UI，目标机器无需安装 Node。从仓库检出构建安装包：
+
+```sh
+pnpm install
+pnpm run desktop:build
+```
+
+安装包产出在 `apps/desktop/dist-release/` —— Windows 为 NSIS 安装器（`win-x64`），macOS 为 dmg（`mac-arm64`）。运行 `pnpm run desktop:dev` 可免打包直接基于源码树打开应用。
+
 ## 社区与支持
 
 - 欢迎通过 [GitHub Discussions](https://github.com/deepseek-ai/deepseek-harness/discussions) 提交反馈或 bug 报告。

@@ -1,0 +1,34 @@
+appId: ai.deepseek.dsh.desktop
+productName: DeepSeek Harness
+directories:
+  output: dist-release
+  buildResources: build
+files:
+  - lib/**/*
+  - package.json
+# The deployed dsh backend closure ships through the afterPack hook instead
+# of extraResources: electron-builder's file filter unconditionally skips a
+# resource tree's root node_modules, which the closure cannot lose.
+afterPack: ./after-pack.cjs
+asar: true
+npmRebuild: false
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  artifactName: dsh-setup-${version}-win-${arch}.${ext}
+mac:
+  # Unsigned local builds; publication adds signing and notarization later.
+  identity: null
+  target:
+    - target: dmg
+      arch:
+        - arm64
+    - target: zip
+      arch:
+        - arm64
+  artifactName: dsh-${version}-mac-${arch}.${ext}

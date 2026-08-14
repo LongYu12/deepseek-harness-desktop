@@ -34,6 +34,17 @@ pnpm run build
 pnpm dsh web
 ```
 
+### Desktop app
+
+The desktop app wraps the Web UI in a native window and needs no Node installation on the target machine. Build the installer from a repository checkout:
+
+```sh
+pnpm install
+pnpm run desktop:build
+```
+
+Installers land in `apps/desktop/dist-release/` — an NSIS setup on Windows (`win-x64`), a dmg on macOS (`mac-arm64`). Run `pnpm run desktop:dev` to open the app against the source tree without packaging.
+
 ## Community and support
 
 - Feel free to submit feedback or bug reports through [GitHub Discussions](https://github.com/deepseek-ai/deepseek-harness/discussions).

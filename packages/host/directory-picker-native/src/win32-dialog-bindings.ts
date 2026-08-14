@@ -21,24 +21,35 @@ interface Koffi {
   proto(declaration: string): unknown
   pointer(type: unknown): unknown
   call(pointer: unknown, proto: unknown, ...args: unknown[]): unknown
-  decode(value: unknown, offsetOrType: unknown, type?: unknown): unknown
+  decode(value: unknown, ...offsetOrType: unknown[]): unknown
   register(fn: (...args: unknown[]) => unknown, type: unknown): unknown
   unregister(callback: unknown): void
   sizeof(type: string): number
-  view(ref: unknown, len: number): ArrayBuffer
 }
+
+/** One {@link readUtf16} decode chunk, in UTF-16 code units. */
+const UTF16_CHUNK_CHARS = 1024
 
 /**
  * Read a NUL-terminated UTF-16 string at a native address. koffi's
  * `_Out_ void **` out-params surface a raw address, and
  * `koffi.decode(addr, 'str16')` would dereference it as a pointer — crash
- * on real Windows — so view the memory directly instead.
+ * on real Windows — so decode fixed-size `char16` arrays instead; koffi
+ * returns each as a JS string truncated at the first NUL code unit, so a
+ * short chunk marks the terminator. Reading through `koffi.view()` is not
+ * an option: its external ArrayBuffer construction calls
+ * `napi_create_external_arraybuffer`, which Electron's NAPI layer rejects
+ * with `napi_fatal_error` — a process-level abort that kills the dialog
+ * child before it can report (the desktop shell runs the backend under
+ * `ELECTRON_RUN_AS_NODE`).
  */
 function readUtf16(koffi: Koffi, address: unknown): string {
-  const bytes = Buffer.from(koffi.view(address, 32768))
-  let end = 0
-  while (end + 1 < bytes.length && bytes[end] !== 0) end += 2
-  return bytes.toString('utf16le', 0, end)
+  let text = ''
+  for (;;) {
+    const chunk = koffi.decode(address, text.length * 2, `char16 [${UTF16_CHUNK_CHARS}]`) as string
+    if (chunk.length < UTF16_CHUNK_CHARS) return text + chunk
+    text += chunk
+  }
 }
 
 const COINIT_APARTMENTTHREADED = 0x2
