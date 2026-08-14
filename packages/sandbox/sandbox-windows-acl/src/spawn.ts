@@ -1,11 +1,12 @@
 /**
  * Restricted-process spawning: anonymous pipes for stdio, STARTUPINFOW with
  * STARTF_USESTDHANDLES, CreateProcessAsUserW under the restricted token, then
- * asynchronous pipe draining and exit waiting. Console isolation
- * (CREATE_NO_WINDOW / CREATE_NEW_CONSOLE) is intentionally absent: under this
- * restriction scheme hidden-console children die with STATUS_DLL_INIT_FAILED
- * (0xC0000142) — verified empirically, see win32-abi.ts. Stdio redirection is
- * pipe-based and unaffected; the child shares the host console.
+ * asynchronous pipe draining and exit waiting. A host without an attached
+ * console passes CREATE_NO_WINDOW so console-subsystem children never
+ * allocate a visible console window; a host with a console leaves the child
+ * attached to it (verified under both restricting lists — the earlier
+ * STATUS_DLL_INIT_FAILED finding was tied to the console logon SID the port
+ * excludes, see win32-abi.ts).
  * @module @deepseek-ai/dsh-sandbox-windows-acl/spawn
  */
 
@@ -58,6 +59,18 @@ export function buildCommandLine(program: string, args: readonly string[]): stri
 interface PipePair {
   read: NativePtr
   write: NativePtr
+}
+
+/**
+ * The CREATE_NO_WINDOW creation flag when the host has no attached console,
+ * otherwise 0. A consoleless host gives every console-subsystem child a NEW
+ * visible console window unless the flag suppresses it; a host with a console
+ * shares it with the child either way, so the flag stays off there.
+ * @param api - the binding table.
+ * @returns the window-suppression flag for this host's console state.
+ */
+export function noWindowFlag(api: Win32Bindings): number {
+  return isNullPtr(api.getConsoleWindow()) ? abi.CREATE_NO_WINDOW : 0
 }
 
 function createPipe(api: Win32Bindings): PipePair {
@@ -125,7 +138,7 @@ export function spawnSandboxed(
     token, null, commandLine,
     null, null,
     1, // bInheritHandles: required for redirection
-    0, // no creation flags: suspended/no-window variants are unusable under the restriction
+    noWindowFlag(api), // consoleless hosts suppress the child's console window
     null, options.cwd,
     startupInfo, processInfo,
   )
@@ -309,7 +322,9 @@ export function spawnSandboxedInherited(
     token, null, commandLine,
     null, null,
     1, // bInheritHandles: the re-enabled std handles must be inheritable
-    abi.CREATE_SUSPENDED, // suspended so job assignment precedes any execution
+    // Suspended so job assignment precedes any execution; consoleless hosts
+    // additionally suppress the child's console window.
+    abi.CREATE_SUSPENDED | noWindowFlag(api),
     null, options.cwd,
     startupInfo, processInfo,
   )

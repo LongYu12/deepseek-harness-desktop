@@ -100,7 +100,7 @@ class Backend {
     if (process.platform === 'win32') {
       // Windows kill is tree-scoped: the backend's own children (PTY shells,
       // workers) must not survive their parent.
-      spawn('taskkill', ['/pid', String(child.pid), '/t', '/f'], { stdio: 'ignore' })
+      spawn('taskkill', ['/pid', String(child.pid), '/t', '/f'], { stdio: 'ignore', windowsHide: true })
       return
     }
     child.kill('SIGTERM')

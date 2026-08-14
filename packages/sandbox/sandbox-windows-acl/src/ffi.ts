@@ -133,6 +133,10 @@ export interface Win32Bindings {
   // runner can clean up grants after the child exits.
   setConsoleCtrlHandler(handler: null, add: number): number
   getStdHandle(stdHandle: number): NativePtr
+  // NULL when the calling process has no attached console — the spawn flags
+  // decision input (spawn.ts): a consoleless host must pass CREATE_NO_WINDOW
+  // or every console-subsystem confined child allocates a visible window.
+  getConsoleWindow(): NativePtr | null
 }
 
 const PVOID: Ptr = koffi.pointer('void')
@@ -427,6 +431,8 @@ function bindings(): Win32Bindings {
     terminateProcess: bind(kernel32, 'TerminateProcess', 'int', [PVOID, 'uint32']),
     setConsoleCtrlHandler: bind(kernel32, 'SetConsoleCtrlHandler', 'int', [PVOID, 'int']),
     getStdHandle: bind(kernel32, 'GetStdHandle', PVOID, ['int']),
+    // wincon.h: HWND GetConsoleWindow(void) — NULL without an attached console.
+    getConsoleWindow: bind(kernel32, 'GetConsoleWindow', PVOID, []),
   } as unknown as Win32Bindings
   return cached
 }

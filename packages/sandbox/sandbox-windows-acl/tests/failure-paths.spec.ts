@@ -11,7 +11,7 @@ import koffi from 'koffi'
 import { PROCESS_INFORMATION, getTempPath } from '../src/ffi.ts'
 import type { NativePtr, Win32Bindings } from '../src/ffi.ts'
 import { Win32Error } from '../src/errors.ts'
-import { drainPipe, spawnSandboxed, spawnSandboxedInherited, waitForExit } from '../src/spawn.ts'
+import { drainPipe, noWindowFlag, spawnSandboxed, spawnSandboxedInherited, waitForExit } from '../src/spawn.ts'
 import * as abi from '../src/win32-abi.ts'
 
 const PVOID = koffi.pointer('void')
@@ -35,6 +35,7 @@ function pipeFailureApi(): { api: Win32Bindings; closed: bigint[]; closeHandle: 
     getLastError: vi.fn(() => 5), // ERROR_ACCESS_DENIED: the failure the branch reports
     closeHandle,
     formatMessageW: vi.fn(() => 0),
+    getConsoleWindow: vi.fn(() => null),
   } as unknown as Win32Bindings
   return { api, closed, closeHandle }
 }
@@ -64,6 +65,7 @@ function resumeFailureApi(): { api: Win32Bindings; closed: bigint[]; closeHandle
     getLastError: vi.fn(() => 5),
     closeHandle,
     formatMessageW: vi.fn(() => 0),
+    getConsoleWindow: vi.fn(() => null),
   } as unknown as Win32Bindings
   return { api, closed, closeHandle }
 }
@@ -167,6 +169,7 @@ function pipeOkApi(overrides: Partial<Win32Bindings> = {}): {
     getLastError: vi.fn(() => 5),
     closeHandle,
     formatMessageW: vi.fn(() => 0),
+    getConsoleWindow: vi.fn(() => null),
     ...overrides,
   } as unknown as Win32Bindings
   return { api, closed, closeHandle }
@@ -226,42 +229,43 @@ describe('spawn pipe failures close their handles', () => {
   })
 })
 
+/** The stub the inherited-happy path needs; overrides flip one call per test. */
+function inheritedApi(overrides: Partial<Win32Bindings> = {}): {
+  api: Win32Bindings
+  closed: bigint[]
+  closeHandle: ReturnType<typeof vi.fn>
+} {
+  const closed: bigint[] = []
+  let std = 50n
+  const closeHandle = vi.fn((handle: NativePtr) => {
+    closed.push(handle)
+    return 1
+  })
+  const api = {
+    createJobObjectW: vi.fn(() => 100n),
+    setInformationJobObject: vi.fn(() => 1),
+    getStdHandle: vi.fn(() => std++),
+    setHandleInformation: vi.fn(() => 1),
+    createProcessAsUserW: vi.fn((
+      _token: unknown, _app: unknown, _cmd: unknown, _pa: unknown, _ta: unknown,
+      _inherit: unknown, _flags: unknown, _env: unknown, _cwd: unknown, _si: unknown, processInfo: NativePtr,
+    ) => {
+      koffi.encode(processInfo, PROCESS_INFORMATION, { hProcess: 200n, hThread: 201n, dwProcessId: 1234, dwThreadId: 5678 })
+      return 1
+    }),
+    assignProcessToJobObject: vi.fn(() => 1),
+    resumeThread: vi.fn(() => 0),
+    getLastError: vi.fn(() => 5),
+    closeHandle,
+    formatMessageW: vi.fn(() => 0),
+    getConsoleWindow: vi.fn(() => null),
+    ...overrides,
+  } as unknown as Win32Bindings
+  return { api, closed, closeHandle }
+}
+
 describe('spawnSandboxedInherited failure paths', () => {
   const token = 1n as NativePtr
-
-  /** The stub the inherited-happy path needs; overrides flip one call per test. */
-  function inheritedApi(overrides: Partial<Win32Bindings> = {}): {
-    api: Win32Bindings
-    closed: bigint[]
-    closeHandle: ReturnType<typeof vi.fn>
-  } {
-    const closed: bigint[] = []
-    let std = 50n
-    const closeHandle = vi.fn((handle: NativePtr) => {
-      closed.push(handle)
-      return 1
-    })
-    const api = {
-      createJobObjectW: vi.fn(() => 100n),
-      setInformationJobObject: vi.fn(() => 1),
-      getStdHandle: vi.fn(() => std++),
-      setHandleInformation: vi.fn(() => 1),
-      createProcessAsUserW: vi.fn((
-        _token: unknown, _app: unknown, _cmd: unknown, _pa: unknown, _ta: unknown,
-        _inherit: unknown, _flags: unknown, _env: unknown, _cwd: unknown, _si: unknown, processInfo: NativePtr,
-      ) => {
-        koffi.encode(processInfo, PROCESS_INFORMATION, { hProcess: 200n, hThread: 201n, dwProcessId: 1234, dwThreadId: 5678 })
-        return 1
-      }),
-      assignProcessToJobObject: vi.fn(() => 1),
-      resumeThread: vi.fn(() => 0),
-      getLastError: vi.fn(() => 5),
-      closeHandle,
-      formatMessageW: vi.fn(() => 0),
-      ...overrides,
-    } as unknown as Win32Bindings
-    return { api, closed, closeHandle }
-  }
 
   it('closes the job and reports when GetStdHandle yields a NULL handle', () => {
     const { api, closeHandle } = inheritedApi({ getStdHandle: vi.fn(() => 0n as NativePtr) })
@@ -351,6 +355,46 @@ describe('spawnSandboxedInherited failure paths', () => {
     expect(closeHandle).toHaveBeenCalledWith(201n)
     expect(closeHandle).not.toHaveBeenCalledWith(200n)
     expect(closeHandle).not.toHaveBeenCalledWith(100n)
+  })
+})
+
+describe('noWindowFlag', () => {
+  it('returns CREATE_NO_WINDOW when the host has no attached console', () => {
+    const api = { getConsoleWindow: vi.fn(() => null) } as unknown as Win32Bindings
+    expect(noWindowFlag(api)).toBe(abi.CREATE_NO_WINDOW)
+  })
+
+  it('returns 0 when the host has a console window', () => {
+    const api = { getConsoleWindow: vi.fn(() => 7n) } as unknown as Win32Bindings
+    expect(noWindowFlag(api)).toBe(0)
+  })
+})
+
+describe('spawn creation flags follow the host console state', () => {
+  const token = 1n as NativePtr
+
+  it('spawnSandboxed suppresses the child console window on a consoleless host and keeps flags clear on a console host', () => {
+    const consoleless = pipeOkApi()
+    spawnSandboxed(consoleless.api, token, { command: 'probe.exe', args: [], cwd: 'C:\\' })
+    expect(consoleless.api.createProcessAsUserW)
+      .toHaveBeenCalledWith(expect.anything(), null, expect.anything(), null, null, 1, abi.CREATE_NO_WINDOW, null, 'C:\\', expect.anything(), expect.anything())
+
+    const consoleHost = pipeOkApi({ getConsoleWindow: vi.fn(() => 7n as NativePtr) })
+    spawnSandboxed(consoleHost.api, token, { command: 'probe.exe', args: [], cwd: 'C:\\' })
+    expect(consoleHost.api.createProcessAsUserW)
+      .toHaveBeenCalledWith(expect.anything(), null, expect.anything(), null, null, 1, 0, null, 'C:\\', expect.anything(), expect.anything())
+  })
+
+  it('spawnSandboxedInherited stays suspended and adds window suppression only on a consoleless host', () => {
+    const consoleless = inheritedApi()
+    spawnSandboxedInherited(consoleless.api, token, { command: 'probe.exe', args: [], cwd: 'C:\\' })
+    expect(consoleless.api.createProcessAsUserW)
+      .toHaveBeenCalledWith(expect.anything(), null, expect.anything(), null, null, 1, abi.CREATE_SUSPENDED | abi.CREATE_NO_WINDOW, null, 'C:\\', expect.anything(), expect.anything())
+
+    const consoleHost = inheritedApi({ getConsoleWindow: vi.fn(() => 7n as NativePtr) })
+    spawnSandboxedInherited(consoleHost.api, token, { command: 'probe.exe', args: [], cwd: 'C:\\' })
+    expect(consoleHost.api.createProcessAsUserW)
+      .toHaveBeenCalledWith(expect.anything(), null, expect.anything(), null, null, 1, abi.CREATE_SUSPENDED, null, 'C:\\', expect.anything(), expect.anything())
   })
 })
 

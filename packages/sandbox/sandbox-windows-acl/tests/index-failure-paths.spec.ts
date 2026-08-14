@@ -147,6 +147,7 @@ function happyStubs(): HappyStubs {
   const assignProcessToJobObject = vi.fn(() => 1)
   const resumeThread = vi.fn(() => 0)
   const getStdHandle = vi.fn(() => fresh())
+  const getConsoleWindow = vi.fn(() => null)
   const localFree = vi.fn(() => 0n)
   const closeHandle = vi.fn(() => 1)
   const getLastError = vi.fn(() => abi.ERROR_BROKEN_PIPE) // the drains' clean EOF
@@ -159,7 +160,7 @@ function happyStubs(): HappyStubs {
     getLengthSid, copySid, createWellKnownSid, isValidSid, createRestrictedToken,
     setTokenInformation, createPipe, setHandleInformation, createProcessAsUserW,
     peekNamedPipe, readFile, waitForSingleObject, getExitCodeProcess, createJobObjectW,
-    setInformationJobObject, assignProcessToJobObject, resumeThread, getStdHandle,
+    setInformationJobObject, assignProcessToJobObject, resumeThread, getStdHandle, getConsoleWindow,
     localFree, closeHandle, getLastError, formatMessageW,
   } as unknown as Win32Bindings
   return {
