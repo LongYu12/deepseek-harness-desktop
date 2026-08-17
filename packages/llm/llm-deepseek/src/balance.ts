@@ -95,6 +95,11 @@ function balanceAmount(raw: unknown, field: string, baseURL: string): number {
  * Validate and map the platform's balance document to provider-neutral
  * entries. The wire shape is a trust boundary, so every field is judged;
  * an unexpected document refuses the whole reply rather than guessing.
+ *
+ * The platform reports no available figure of its own: each entry carries
+ * the granted and topped-up amounts beside the total, and their sum is the
+ * spendable balance, so the mapping adds them rather than trusting a
+ * derived field a relay could forge independently.
  * @param payload - parsed response body of `/user/balance`.
  * @param baseURL - endpoint named in refusals (never the credential).
  * @returns currency entries in provider order.
@@ -111,9 +116,13 @@ export function mapDeepSeekBalanceResponse(payload: unknown, baseURL: string): L
     if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) throw unexpected()
     const currency = (entry as { currency?: unknown }).currency
     if (typeof currency !== 'string' || currency.length === 0) throw unexpected()
+    const granted = balanceAmount((entry as { granted_balance?: unknown }).granted_balance, 'granted_balance', baseURL)
+    const toppedUp = balanceAmount((entry as { topped_up_balance?: unknown }).topped_up_balance, 'topped_up_balance', baseURL)
     return {
       currency,
-      availableBalance: balanceAmount((entry as { available_balance?: unknown }).available_balance, 'available_balance', baseURL),
+      // The platform's own decimal strings carry nine fractional digits, so
+      // pinning the sum to the same precision keeps binary float noise out.
+      availableBalance: Math.round((granted + toppedUp) * 1e9) / 1e9,
       totalBalance: balanceAmount((entry as { total_balance?: unknown }).total_balance, 'total_balance', baseURL),
     }
   })

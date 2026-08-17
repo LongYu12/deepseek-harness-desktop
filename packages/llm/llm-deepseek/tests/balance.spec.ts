@@ -40,8 +40,7 @@ const BALANCE_DOCUMENT = JSON.stringify({
     currency: 'CNY',
     total_balance: '100.000000000',
     granted_balance: '5.000000000',
-    topped_up_balance: '95.000000000',
-    available_balance: '12.500000000',
+    topped_up_balance: '7.500000000',
   }],
 })
 
@@ -134,8 +133,14 @@ describe('mapDeepSeekBalanceResponse', () => {
 
   it('accepts numeric amounts alongside the platform decimal strings', () => {
     expect(mapDeepSeekBalanceResponse({
-      balance_infos: [{ currency: 'USD', total_balance: 4, available_balance: 2.5 }],
+      balance_infos: [{ currency: 'USD', total_balance: 4, granted_balance: 1.5, topped_up_balance: 1 }],
     }, BASE)).toEqual([{ currency: 'USD', availableBalance: 2.5, totalBalance: 4 }])
+  })
+
+  it('sums the granted and topped-up amounts into the spendable balance', () => {
+    expect(mapDeepSeekBalanceResponse({
+      balance_infos: [{ currency: 'CNY', total_balance: '53.21', granted_balance: '0.00', topped_up_balance: '53.21' }],
+    }, BASE)).toEqual([{ currency: 'CNY', availableBalance: 53.21, totalBalance: 53.21 }])
   })
 
   it('refuses a document that is not an object holding balance_infos', () => {
@@ -148,9 +153,10 @@ describe('mapDeepSeekBalanceResponse', () => {
     for (const entry of [
       null,
       [],
-      { currency: '', total_balance: '1', available_balance: '1' },
-      { currency: 'CNY', total_balance: 'not-a-number', available_balance: '1' },
-      { currency: 'CNY', total_balance: '1', available_balance: null },
+      { currency: '', total_balance: '1', granted_balance: '1', topped_up_balance: '0' },
+      { currency: 'CNY', total_balance: 'not-a-number', granted_balance: '1', topped_up_balance: '0' },
+      { currency: 'CNY', total_balance: '1', granted_balance: null, topped_up_balance: '0' },
+      { currency: 'CNY', total_balance: '1', granted_balance: '1' },
     ]) {
       expect(codeOf(() => mapDeepSeekBalanceResponse({ balance_infos: [entry] }, BASE)))
         .toBe('BALANCE_UNAVAILABLE')
