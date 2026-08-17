@@ -127,14 +127,17 @@ function installFakeKoffi(world: ComWorld): void {
       proto: (declaration: string) => ({ declaration }),
       pointer: (type: unknown) => type,
       sizeof: (type: string) => { void type; return FAKE_POINTER_SIZE },
-      view: (value: unknown, len: number): ArrayBuffer => {
-        const bytes = Buffer.alloc(len)
-        bytes.write((value as FakePtr).text as string, 'utf16le')
-        return bytes.buffer
-      },
       register: (fn: (hwnd: unknown, lparam: unknown) => number) => { world.registered += 1; return { fn } },
       unregister: () => { world.unregistered += 1 },
-      decode: (value: unknown, offsetOrType: unknown): unknown => {
+      decode: (value: unknown, offsetOrType: unknown, type?: unknown): unknown => {
+        if (typeof offsetOrType === 'number' && typeof type === 'string' && type.startsWith('char16 [')) {
+          // readUtf16's array decode: koffi returns at most the declared
+          // count of UTF-16 chars from the byte offset, truncated earlier at
+          // the first NUL like the CoTaskMem buffer (the fake text has none).
+          const start = offsetOrType / 2
+          const count = parseInt(type.slice('char16 ['.length, -1), 10)
+          return ((value as FakePtr).text as string).slice(start, start + count)
+        }
         if (offsetOrType === 'str16') return (value as FakePtr).text
         if (typeof offsetOrType === 'number') {
           // Vtable slot read: offsets must be multiples of the fake width.
@@ -196,6 +199,15 @@ describe('loadWin32DialogBindings over the fake COM world', () => {
     const bindings = await (await loadBindingsModule()).loadWin32DialogBindings()
     expect(runFolderDialog(bindings, 'Pick', vi.fn())).toBe('C:\\选中\\directory')
     expect(world.dpiContexts).toEqual([-4, -3])
+  })
+
+  it('reassembles a result path longer than one decode chunk', async () => {
+    // Beyond the 1024-char chunk: the read loop must iterate until the NUL.
+    const longPath = `C:\\${'目录'.repeat(600)}\\end`
+    const world = comWorld({ path: longPath })
+    installFakeKoffi(world)
+    const bindings = await (await loadBindingsModule()).loadWin32DialogBindings()
+    expect(runFolderDialog(bindings, 'Pick', vi.fn())).toBe(longPath)
   })
 
   it('keeps the tier when no DPI context is accepted or the symbol is absent', async () => {

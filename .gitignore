@@ -1,5 +1,7 @@
 CLAUDE.local.md
 .env
+.github-release-token
+desktop-build-fix.log
 node_modules/
 lib/
 *.tsbuildinfo
@@ -31,6 +33,8 @@ python/sdk-runtime/src/deepseek_harness_runtime/runtime/node/
 python/**/__pycache__/
 python/**/.pytest_cache/
 apps/web/dist/
+apps/desktop/backend/
+apps/desktop/dist-release/
 .artifacts/
 .playwright-mcp/
 .orig

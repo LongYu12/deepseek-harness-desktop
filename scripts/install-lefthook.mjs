@@ -14,7 +14,16 @@ import {
 } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
-import lefthookPackage from 'lefthook/package.json' with { type: 'json' }
+
+// A production-mode install prunes the dev-only lefthook package before this
+// postinstall runs; hooks are a developer concern, so an unresolvable
+// manifest downgrades to the no-op path below instead of failing the install.
+let lefthookPackage = {}
+try {
+  lefthookPackage = (await import('lefthook/package.json', { with: { type: 'json' } })).default
+} catch {
+  lefthookPackage = {}
+}
 
 const MINIMUM_GIT = [2, 26, 0]
 const HOOKS_DIRECTORY = 'dsh-hooks'

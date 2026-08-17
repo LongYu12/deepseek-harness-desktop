@@ -7,19 +7,16 @@
  * Regenerate the probe with:
  *   g++ -std=c++20 -municode -O2 -o abi-probe.exe abi-probe.cpp -ladvapi32 && .\abi-probe.exe
  *
- * The port intentionally excludes two pieces of the original POC
- * (github.com/huoyaoyuan/windows-acl-restrict-poc @ 10e4dfb), both verified
- * empirically on Windows 11 build 26200:
- *  - S-1-2-1 (console logon SID) in the restricting list: the POC created it
- *    via CreateWellKnownSid(WinLocalLogonSid) which fails here with
- *    ERROR_INVALID_PARAMETER (87), leaving a garbage SID that makes
- *    CreateRestrictedToken fail with ERROR_INVALID_SID (1337); using the
- *    correct WinConsoleLogonSid does produce a valid S-1-2-1, but the child
- *    then still dies with STATUS_DLL_INIT_FAILED (0xC0000142) whenever
- *    CREATE_NO_WINDOW / CREATE_NEW_CONSOLE is used.
- *  - Console isolation: under this restriction scheme a hidden console is not
- *    attainable, so children share the host console (stdio redirection is
- *    pipe-based and unaffected).
+ * The port intentionally excludes the original POC's S-1-2-1 (console logon
+ * SID) restricting entry (github.com/huoyaoyuan/windows-acl-restrict-poc @
+ * 10e4dfb), verified empirically on Windows 11 build 26200:
+ * CreateWellKnownSid(WinLocalLogonSid) fails here with
+ * ERROR_INVALID_PARAMETER (87), leaving a garbage SID that makes
+ * CreateRestrictedToken fail with ERROR_INVALID_SID (1337); the correct
+ * WinConsoleLogonSid does produce a valid S-1-2-1, but children created
+ * under that token then die with STATUS_DLL_INIT_FAILED (0xC0000142).
+ * Without the console logon SID, CREATE_NO_WINDOW children run normally
+ * under both restricting lists (spawn.ts applies it for consoleless hosts).
  * @module @deepseek-ai/dsh-sandbox-windows-acl/win32-abi
  */
 
@@ -149,6 +146,11 @@ export const MAX_PATH = 260
 // assign it to the kill-on-close job before any of its code runs.
 /** CREATE_SUSPENDED: create the child with its primary thread suspended until ResumeThread. */
 export const CREATE_SUSPENDED = 0x4
+// winbase.h line ~427: consoleless hosts add this so a console-subsystem
+// child never allocates the visible console window Windows would otherwise
+// give it (spawn.ts checks GetConsoleWindow before applying it).
+/** CREATE_NO_WINDOW: the child runs without a console window (attached or newly allocated). */
+export const CREATE_NO_WINDOW = 0x08000000
 // winbase.h lines ~497-499: GetStdHandle selectors.
 /** STD_INPUT_HANDLE: GetStdHandle selector for the standard input. */
 export const STD_INPUT_HANDLE = -10
