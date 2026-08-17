@@ -128,7 +128,9 @@ try {
     if ($LASTEXITCODE -ne 0) { Stop-Release 'gh release create 失败' }
     $url = (& gh release view $tag --json url --jq .url) 2>&1
   } else {
-    # 回退：GitHub REST API。token 来源：环境变量 GITHUB_TOKEN > .github-release-token
+    # 回退：GitHub REST API。token 来源：环境变量 GITHUB_TOKEN > .github-release-token。
+    # 走「草稿 -> 上传资产 -> 发布」三步：启用 Immutable Releases 的仓库在发布后
+    # 禁止追加资产，草稿阶段是唯一允许上传的窗口。
     $token = $env:GITHUB_TOKEN
     if (-not $token -and (Test-Path '.github-release-token')) {
       $token = (Get-Content '.github-release-token' -Raw).Trim()
@@ -150,6 +152,7 @@ try {
       name     = "Desktop v$version"
       body     = "DeepSeek Harness 桌面版 v$version（Windows x64 NSIS 安装器）。"
       prerelease = $prerelease
+      draft    = $true
     } | ConvertTo-Json -Compress
     try {
       $release = Invoke-RestMethod -Method Post -Uri "https://api.github.com/repos/$repoSlug/releases" -Headers $headers -Body $body -ContentType 'application/json; charset=utf-8'
@@ -176,7 +179,13 @@ try {
       $bytes = [System.IO.File]::ReadAllBytes($installer)
       Invoke-RestMethod -Method Post -Uri $uploadUri -Headers $uploadHeaders -Body $bytes | Out-Null
     }
-    $url = $release.html_url
+    # 发布草稿；此后 Release 成为正式版本，启用 Immutable Releases 的仓库将其锁为不可变。
+    try {
+      $published = Invoke-RestMethod -Method Patch -Uri "https://api.github.com/repos/$repoSlug/releases/$($release.id)" -Headers $headers -Body '{"draft":false}' -ContentType 'application/json'
+    } catch {
+      Stop-Release "资产已上传草稿，但发布失败：$($_.Exception.Message)。到 GitHub Releases 页面手动发布草稿 $($release.id)"
+    }
+    $url = $published.html_url
   }
 
   Write-Host ''
