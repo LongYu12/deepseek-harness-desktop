@@ -135,7 +135,7 @@ describe('web e2e: plugin store tab', () => {
     // The keyless stand-in for `pnpm add`: record the dependency exactly where
     // pnpm would, then let the real reconcile + manifest write + restart flag
     // run. Registry traffic is the only thing this lane cannot do.
-    const gateway = (scaffold.ctx as typeof scaffold.ctx & { pluginStore?: PluginStoreGatewayUnderTest }).pluginStore
+    const gateway = (scaffold.ctx as unknown as { pluginStore?: PluginStoreGatewayUnderTest }).pluginStore
     if (gateway === undefined) throw new Error('plugin store gateway missing from the settled tree')
     gateway.runner = (args, cwd) => {
       const manifestPath = join(cwd, 'package.json')

@@ -64,7 +64,7 @@ async function harness(profileDir?: string, config?: Record<string, unknown>): P
 
 /** A fetch fake resolving to one JSON body. */
 function fetchFake(body: unknown, status = 200): typeof fetch {
-  return (async () => new Response(typeof body === 'string' ? body : JSON.stringify(body), { status })) as typeof fetch
+  return async () => new Response(typeof body === 'string' ? body : JSON.stringify(body), { status })
 }
 
 describe('PluginStoreGateway remote surface', () => {
@@ -115,7 +115,7 @@ describe('catalog', () => {
     const catalog = loadStoreCatalog({
       indexUrl: 'https://index.example/catalog.json',
       fetchTimeoutMs: 500,
-      fetchImpl: (async () => { throw new Error('network down') }) as typeof fetch,
+      fetchImpl: async () => { throw new Error('network down') },
     })
     await expect(catalog).rejects.toThrow('failed to fetch catalog index')
   })
@@ -163,7 +163,7 @@ describe('inventory', () => {
     const snapshot = store.inventory()
     expect(snapshot).toMatchObject({ bundles: [], restartNeeded: false })
     expect(snapshot.entries).toEqual([
-      { entryId: expect.any(String), moduleName: 'cordis:active', enabled: true, storeDisabled: false },
+      { entryId: expect.any(String) as unknown, moduleName: 'cordis:active', enabled: true, storeDisabled: false },
     ])
   })
 
@@ -184,7 +184,9 @@ describe('inventory', () => {
     const entryId = await ctx.loader.create({ name: 'cordis:active' })
     const groupId = await ctx.loader.create({ name: 'cordis:active', group: true })
     writeFileSync(join(dir, PROFILE_STORE_PATCH_FILENAME), [
-      `- id: ${entryId}`,
+      // Quoted: an all-digit Loader entry id parses as a YAML number unquoted,
+      // and yaml.dump quotes such strings on the production write path too.
+      `- id: '${entryId}'`,
       '  disabled: true',
       '- id: some-other-row',
       '  disabled: false',
@@ -376,7 +378,7 @@ describe('setEntryEnabled', () => {
     expect(disabled.ok).toBe(true)
     expect(disabled.restartNeeded).toBe(false)
     expect(disabled.message).toContain('disabled')
-    expect(readFileSync(path, 'utf8')).toContain(String(entryId))
+    expect(readFileSync(path, 'utf8')).toContain(entryId)
 
     expect((await store.setEntryEnabled(entryId, false)).message).toContain('already disabled')
 
@@ -396,7 +398,7 @@ describe('setEntryEnabled', () => {
     await store.setEntryEnabled(entryId, false)
     await store.setEntryEnabled(entryId, true)
     expect(readFileSync(path, 'utf8')).toContain('keep-me')
-    expect(readFileSync(path, 'utf8')).not.toContain(String(entryId))
+    expect(readFileSync(path, 'utf8')).not.toContain(entryId)
   })
 
   it('reads an empty layer file as no rows', async () => {
@@ -447,10 +449,10 @@ describe('catalog resolution details', () => {
 describe('registry package name guard', () => {
   it('accepts registry names and rejects every spec shape', () => {
     for (const name of ['left-pad', '@scope/pkg', 'a.b-c_d', 'd0']) {
-      expect(() => assertRegistryPackageName(name)).not.toThrow()
+      expect(() => { assertRegistryPackageName(name) }).not.toThrow()
     }
     for (const name of ['./x', '../x', 'x/y/z', 'git+https://example.com', 'pkg@1.0.0', 'UPPER', '-lead', '.lead', 'lead.', '', '@', '@/x', 'a//b']) {
-      expect(() => assertRegistryPackageName(name)).toThrow('not a registry package name')
+      expect(() => { assertRegistryPackageName(name) }).toThrow('not a registry package name')
     }
   })
 })

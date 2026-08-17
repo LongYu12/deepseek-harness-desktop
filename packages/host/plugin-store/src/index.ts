@@ -186,7 +186,17 @@ export class PluginStoreGateway extends TypertRemoteService {
    * @throws when the host booted without a profile or the entry id is unknown.
    */
   @Remote('setEntryEnabled')
-  async setEntryEnabled(entryId: string, enabled: boolean): Promise<StoreMutationResult> {
+  setEntryEnabled(entryId: string, enabled: boolean): Promise<StoreMutationResult> {
+    try {
+      return Promise.resolve(this.applyEntryEnablement(entryId, enabled))
+    } catch (error) {
+      // The async predecessor rejected here; keep validation failures async too.
+      return Promise.reject(error)
+    }
+  }
+
+  /** Synchronous core of {@link setEntryEnabled}; the Remote wrapper adds the promise. */
+  private applyEntryEnablement(entryId: string, enabled: boolean): StoreMutationResult {
     const profileDir = this.profileDir()
     if (![...this.ctx.loader.entries()].some(entry => entry.id === entryId)) {
       throw new Error(`${NAME}: unknown Loader entry id ${JSON.stringify(entryId)}`)

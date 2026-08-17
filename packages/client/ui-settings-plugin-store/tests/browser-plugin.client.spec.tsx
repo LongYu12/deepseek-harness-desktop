@@ -27,11 +27,11 @@ function remoteFace() {
       .mockResolvedValue({ ok: true, value: CATALOG }),
     inventory: vi.fn<() => Promise<RemoteOutcome<typeof INVENTORY>>>()
       .mockResolvedValue({ ok: true, value: INVENTORY }),
-    install: vi.fn<(packageName: string) => Promise<RemoteOutcome<typeof MUTATION>>>()
+    installBundle: vi.fn<(packageName: string) => Promise<RemoteOutcome<typeof MUTATION>>>()
       .mockResolvedValue({ ok: true, value: MUTATION }),
-    remove: vi.fn<(packageName: string) => Promise<RemoteOutcome<typeof MUTATION>>>()
+    removeBundle: vi.fn<(packageName: string) => Promise<RemoteOutcome<typeof MUTATION>>>()
       .mockResolvedValue({ ok: true, value: MUTATION }),
-    update: vi.fn<(packageName: string) => Promise<RemoteOutcome<typeof MUTATION>>>()
+    updateBundle: vi.fn<(packageName: string) => Promise<RemoteOutcome<typeof MUTATION>>>()
       .mockResolvedValue({ ok: true, value: MUTATION }),
     setEntryEnabled: vi.fn<(entryId: string, enabled: boolean) => Promise<RemoteOutcome<typeof MUTATION>>>()
       .mockResolvedValue({ ok: true, value: MUTATION }),
@@ -85,7 +85,7 @@ describe('ui-settings-plugin-store browser plugin', () => {
     await expect(injected.remove('@fixture/one')).resolves.toEqual(MUTATION)
     await expect(injected.update('@fixture/one')).resolves.toEqual(MUTATION)
     await expect(injected.setEntryEnabled('entry-1', false)).resolves.toEqual(MUTATION)
-    expect(b.remote.install).toHaveBeenCalledWith('@fixture/one')
+    expect(b.remote.installBundle).toHaveBeenCalledWith('@fixture/one')
     expect(b.remote.setEntryEnabled).toHaveBeenCalledWith('entry-1', false)
     await b.ctx.fiber.dispose()
   })
@@ -106,16 +106,16 @@ describe('ui-settings-plugin-store browser plugin', () => {
         b.remote.inventory.mockResolvedValueOnce(failure)
         return injected.inventory()
       }],
-      ['install', () => {
-        b.remote.install.mockResolvedValueOnce(failure)
+      ['installBundle', () => {
+        b.remote.installBundle.mockResolvedValueOnce(failure)
         return injected.install('@fixture/one')
       }],
-      ['remove', () => {
-        b.remote.remove.mockResolvedValueOnce(failure)
+      ['removeBundle', () => {
+        b.remote.removeBundle.mockResolvedValueOnce(failure)
         return injected.remove('@fixture/one')
       }],
-      ['update', () => {
-        b.remote.update.mockResolvedValueOnce(failure)
+      ['updateBundle', () => {
+        b.remote.updateBundle.mockResolvedValueOnce(failure)
         return injected.update('@fixture/one')
       }],
       ['setEntryEnabled', () => {

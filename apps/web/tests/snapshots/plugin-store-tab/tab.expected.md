@@ -1,0 +1,602 @@
+- dialog "设置":
+  - navigation:
+    - text: 设置
+    - button "通用设置":
+      - img
+      - text: 通用设置
+    - button "模型":
+      - img
+      - text: 模型
+    - button "插件":
+      - img
+      - text: 插件
+    - button "Agent 预设":
+      - img
+      - text: Agent 预设
+  - button "打开配置文件"
+  - button "关闭":
+    - img
+    - text: 关闭
+  - heading "插件" [level=2]
+  - paragraph: 配置和查看本部署已安装的插件。
+  - tablist "插件视图":
+    - tab "插件配置"
+    - tab "插件列表"
+    - tab "插件商店" [selected]
+  - tabpanel "插件商店":
+    - img
+    - text: 搜索插件
+    - searchbox "搜索插件"
+    - heading "插件商店" [level=3]
+    - text: "3"
+    - list:
+      - listitem:
+        - strong: "@deepseek-ai/dsh-base"
+        - button "安装"
+        - paragraph: 核心 bundle：agent、会话、工具与基础组合。
+        - paragraph: DeepSeek AI
+        - list:
+          - listitem: official
+          - listitem: core
+      - listitem:
+        - strong: "@deepseek-ai/dsh-web-app"
+        - button "安装"
+        - paragraph: Web 应用 bundle：本地 webserver 之上的浏览器界面。
+        - paragraph: DeepSeek AI
+        - list:
+          - listitem: official
+          - listitem: web
+      - listitem:
+        - strong: "@deepseek-ai/dsh-headless"
+        - button "安装"
+        - paragraph: Headless bundle：无浏览器界面的纯终端运行。
+        - paragraph: DeepSeek AI
+        - list:
+          - listitem: official
+          - listitem: headless
+    - heading "已安装" [level=3]
+    - text: "0"
+    - paragraph: 暂无可用插件。
+    - heading "已加载条目" [level=3]
+    - text: "135"
+    - list:
+      - listitem:
+        - strong: cordis:include
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/cordis-plugin-timer"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/cordis-plugin-hmr"
+        - text: 启用
+        - switch "启用"
+      - listitem:
+        - strong: "@deepseek-ai/dsh-llm"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-session"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-typert-registry"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-typert-loader"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-api-gateway"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-session-title"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-session-title-first-prompt-llm"
+        - text: 启用
+        - switch "启用"
+      - listitem:
+        - strong: "@deepseek-ai/dsh-user-questions"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-agent"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-agent-default-model"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-jobs-local"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-llm-retry"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-settings-file"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-credentials-local"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-llm-pi-ai"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-session-persistence-jsonl"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-attachment-local"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-session-query-sqlite"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-session-projection"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-session-telemetry-otel"
+        - text: 启用
+        - switch "启用"
+      - listitem:
+        - strong: "@deepseek-ai/dsh-subprocess-local"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-sandbox-local"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-sandbox-policy"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-bash-sandbox"
+        - text: 启用
+        - switch "启用"
+      - listitem:
+        - strong: "@deepseek-ai/dsh-pwsh-sandbox"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-user-approval"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-permission-presets"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-shell-env"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-tool-bash"
+        - text: 启用
+        - switch "启用"
+      - listitem:
+        - strong: "@deepseek-ai/dsh-tool-pwsh"
+        - text: 启用
+        - switch "启用"
+      - listitem:
+        - strong: "@deepseek-ai/dsh-tool-jobs"
+        - text: 启用
+        - switch "启用"
+      - listitem:
+        - strong: "@deepseek-ai/dsh-fs-observation-policy"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-tool-fs"
+        - text: 启用
+        - switch "启用"
+      - listitem:
+        - strong: "@deepseek-ai/dsh-tool-fs-search"
+        - text: 启用
+        - switch "启用"
+      - listitem:
+        - strong: "@deepseek-ai/dsh-agent-instructions"
+        - text: 启用
+        - switch "启用"
+      - listitem:
+        - strong: "@deepseek-ai/dsh-skill"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-skill-filesystem"
+        - text: 启用
+        - switch "启用"
+      - listitem:
+        - strong: "@deepseek-ai/dsh-skill-badge"
+        - text: 启用
+        - switch "启用"
+      - listitem:
+        - strong: "@deepseek-ai/dsh-tool-skill"
+        - text: 启用
+        - switch "启用"
+      - listitem:
+        - strong: "@deepseek-ai/dsh-commands"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-command-feedback"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-goal"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-goal-round-driver"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-command-goal"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-plan-mode"
+        - text: 启用
+        - switch "启用"
+      - listitem:
+        - strong: "@deepseek-ai/dsh-token-meter"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-compaction-basic"
+        - text: 启用
+        - switch "启用"
+      - listitem:
+        - strong: "@deepseek-ai/dsh-command-compact"
+        - text: 启用
+        - switch "启用"
+      - listitem:
+        - strong: "@deepseek-ai/dsh-subagent"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-subagent-spawn-in-process"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-subagent-fork-in-process"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-tool-subagent-control"
+        - text: 启用
+        - switch "启用"
+      - listitem:
+        - strong: "@deepseek-ai/dsh-tool-subagent-control/list-agents"
+        - text: 启用
+        - switch "启用"
+      - listitem:
+        - strong: "@deepseek-ai/dsh-tool-subagent"
+        - text: 启用
+        - switch "启用"
+      - listitem:
+        - strong: "@deepseek-ai/dsh-tool-subagent"
+        - text: 启用
+        - switch "启用"
+      - listitem:
+        - strong: "@deepseek-ai/dsh-tool-subagent-report"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-workflow-worker-thread"
+        - text: 启用
+        - switch "启用"
+      - listitem:
+        - strong: "@deepseek-ai/dsh-tool-workflow"
+        - text: 启用
+        - switch "启用"
+      - listitem:
+        - strong: "@deepseek-ai/dsh-tool-call-timeout-policy"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-spill-local"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-spill-policy"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-session-checkpoint-policy"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-compaction-tool-result-pruner"
+        - text: 启用
+        - switch "启用"
+      - listitem:
+        - strong: "@deepseek-ai/dsh-tool-todo"
+        - text: 启用
+        - switch "启用"
+      - listitem:
+        - strong: "@deepseek-ai/dsh-tool-goal"
+        - text: 启用
+        - switch "启用"
+      - listitem:
+        - strong: "@deepseek-ai/dsh-tool-ralph"
+        - text: 启用
+        - switch "启用"
+      - listitem:
+        - strong: "@deepseek-ai/dsh-tool-str-replace-editor"
+        - text: 启用
+        - switch "启用"
+      - listitem:
+        - strong: "@deepseek-ai/dsh-repeat-tool-reminder"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-web"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-web-search-deepseek"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-tool-web"
+        - text: 启用
+        - switch "启用"
+      - listitem:
+        - strong: "@deepseek-ai/dsh-tools"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-system-prompt"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-agent-loop"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-fs-sandbox"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-llm-deepseek"
+        - text: 启用
+        - switch "启用"
+      - listitem:
+        - strong: "@deepseek-ai/dsh-code-runtime-worker-thread"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-storage"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-storage-json"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-storage-domain"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-message-feedback"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-client-ui-balance-indicator"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-session-log-export"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-workspace"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-session-projection-cache"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-session-stats"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-host-directory-picker-auto"
+        - text: 启用
+        - switch "启用"
+      - listitem:
+        - strong: "@deepseek-ai/dsh-host-plugin-inventory"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-host-plugin-store"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-host-apiproxy"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-cordis-host-runner"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-web-app/startup"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-host-webserver"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-web-app"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-client-hmr"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-client-modules"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-client-connection"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-api-remotes"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-client-runtime"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-cordis-client-runner"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-client-ui-theme"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-client-locale"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-client-ui-layout"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-client-ui-sidebar"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-client-ui-settings"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-client-ui-settings-general"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-client-ui-settings-models"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-client-ui-settings-plugin-inventory"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-client-ui-settings-plugin-store"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-client-ui-conversation"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-client-ui-tool"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-client-ui-cordis"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-client-ui-workflow-run"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-client-ui-deliverables"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-client-ui-workspace"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-client-ui-input-trigger"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-client-ui-commands"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-client-ui-skill"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-client-ui-subagent"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-client-ui-jobs"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-client-ui-goal"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-client-ui-message-feedback"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-client-ui-model-selection"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-client-ui-permission-presets"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-client-ui-agent-preset"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-client-ui-settings-plugins"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-client-ui-plan"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-client-ui-user-questions"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-client-ui-trajectory"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-agent-presets"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-host-directory-picker-browse"
+        - text: 停用
+        - switch "停用" [checked]
+      - listitem:
+        - strong: "@deepseek-ai/dsh-client-ui-directory-picker-browse"
+        - text: 停用
+        - switch "停用" [checked]

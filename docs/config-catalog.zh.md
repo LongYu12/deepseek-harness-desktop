@@ -787,6 +787,24 @@ export interface Config {
 
 来源：[`packages/host/frontend-static/src/index.ts:28`](../packages/host/frontend-static/src/index.ts)
 
+<a id="deepseek-aidsh-host-plugin-store"></a>
+
+## `@deepseek-ai/dsh-host-plugin-store`
+
+需要：`loader`
+
+```ts config-catalog
+/** Store gateway config. */
+export interface Config {
+  /** Remote catalog index URL; overrides the builtin catalog when set. */
+  indexUrl?: string
+  /** Remote catalog fetch timeout in milliseconds. */
+  fetchTimeoutMs?: number
+}
+```
+
+来源：[`packages/host/plugin-store/src/index.ts:51`](../packages/host/plugin-store/src/index.ts)
+
 <a id="deepseek-aidsh-host-webserver"></a>
 
 ## `@deepseek-ai/dsh-host-webserver`
@@ -3034,6 +3052,7 @@ export interface Config {
 - `@deepseek-ai/dsh-client-modules` — 需要 `webServer` · `loader`（[`packages/client/modules/src/index.ts`](../packages/client/modules/src/index.ts)）
 - `@deepseek-ai/dsh-client-runtime`（[`packages/client/runtime/src/index.ts`](../packages/client/runtime/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-agent-preset`（[`packages/client/ui-agent-preset/src/index.ts`](../packages/client/ui-agent-preset/src/index.ts)）
+- `@deepseek-ai/dsh-client-ui-balance-indicator`（[`packages/client/ui-balance-indicator/src/index.ts`](../packages/client/ui-balance-indicator/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-commands`（[`packages/client/ui-commands/src/index.ts`](../packages/client/ui-commands/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-conversation`（[`packages/client/ui-conversation/src/index.ts`](../packages/client/ui-conversation/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-cordis`（[`packages/extensions/ui-cordis/src/index.ts`](../packages/extensions/ui-cordis/src/index.ts)）
@@ -3052,6 +3071,7 @@ export interface Config {
 - `@deepseek-ai/dsh-client-ui-settings-general`（[`packages/client/ui-settings-general/src/index.ts`](../packages/client/ui-settings-general/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-settings-models`（[`packages/client/ui-settings-models/src/index.ts`](../packages/client/ui-settings-models/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-settings-plugin-inventory`（[`packages/client/ui-settings-plugin-inventory/src/index.ts`](../packages/client/ui-settings-plugin-inventory/src/index.ts)）
+- `@deepseek-ai/dsh-client-ui-settings-plugin-store`（[`packages/client/ui-settings-plugin-store/src/index.ts`](../packages/client/ui-settings-plugin-store/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-settings-plugins`（[`packages/client/ui-settings-plugins/src/index.ts`](../packages/client/ui-settings-plugins/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-sidebar`（[`packages/client/ui-sidebar/src/index.ts`](../packages/client/ui-sidebar/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-skill`（[`packages/client/ui-skill/src/index.ts`](../packages/client/ui-skill/src/index.ts)）

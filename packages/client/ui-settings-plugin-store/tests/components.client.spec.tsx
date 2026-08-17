@@ -49,7 +49,7 @@ const INVENTORY: Inventory = {
     { entryId: 'entry-disabled', moduleName: '@fixture/disabled-module', enabled: false, storeDisabled: true },
   ],
   restartNeeded: true,
-} as unknown as Inventory
+}
 
 const OK_MUTATION = { ok: true, restartNeeded: true, message: 'mutation done' } as Mutation
 const FAILED_MUTATION = { ok: false, restartNeeded: false, message: 'pnpm exploded' } as Mutation
@@ -158,7 +158,7 @@ describe('PluginStoreSettingsTab', () => {
       catalog: vi.fn<PluginStoreSettingsTabInjected['catalog']>()
         .mockResolvedValue({ source: 'builtin', entries: [] } as unknown as Catalog),
       inventory: vi.fn<PluginStoreSettingsTabInjected['inventory']>()
-        .mockResolvedValue({ bundles: [], entries: [], restartNeeded: false } as unknown as Inventory),
+        .mockResolvedValue({ bundles: [], entries: [], restartNeeded: false }),
     }))
     await settle()
     expect(screen.getAllByText(en.empty).length).toBeGreaterThanOrEqual(2)
@@ -176,7 +176,7 @@ describe('PluginStoreSettingsTab', () => {
           ...INVENTORY.bundles,
           { packageName: '@fixture/empty-meta', version: '1.0.0', restartNeeded: true },
         ],
-      } as unknown as Inventory)
+      })
     const install = vi.fn<PluginStoreSettingsTabInjected['install']>().mockReturnValue(deferred.promise)
     const view = renderTab(face({ install, inventory }))
     await settle()
