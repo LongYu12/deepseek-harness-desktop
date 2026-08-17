@@ -58,7 +58,23 @@ try {
 
   # --- 3. 工具依赖 -------------------------------------------------------
   if (-not (Get-Command git -ErrorAction SilentlyContinue)) { Stop-Release '未找到 git' }
+  # winget/MSI 装的 gh 在固定目录；从资源管理器双击启动的进程可能继承
+  # 安装前的陈旧 PATH，这里按固定目录兜底探测。
+  foreach ($ghDir in @('C:\Program Files\GitHub CLI', 'C:\Program Files (x86)\GitHub CLI')) {
+    if ((Test-Path (Join-Path $ghDir 'gh.exe')) -and ($env:PATH -notlike "*$ghDir*")) {
+      $env:PATH = "$ghDir;$env:PATH"
+    }
+  }
   $gh = Get-Command gh -ErrorAction SilentlyContinue
+  if ($gh) {
+    # 装了 gh 但未登录时不可用，回退到 REST API（PAT）通道。
+    # 临时放宽 ErrorActionPreference：Stop 会把 gh 的 stderr 提示变成终止性错误。
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    & gh auth status 2>&1 | Out-Null
+    $ErrorActionPreference = $prevEap
+    if ($LASTEXITCODE -ne 0) { $gh = $null }
+  }
   $remoteUrl = (git remote get-url origin) 2>&1
   if ($LASTEXITCODE -ne 0) { Stop-Release 'git remote origin 未配置' }
 
