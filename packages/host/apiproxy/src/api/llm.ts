@@ -74,6 +74,22 @@ export interface LlmApi {
     }>,
     signal?: AbortSignal,
   ): Promise<RpcResponse<{ models: DiscoveredModelView[] }>>
+
+  /**
+   * Report the account balance the provider's configured credentials see.
+   *
+   * `provider` names the route whose adapter answers; the host resolves it to
+   * the adapter's settings namespace and asks that adapter's balance query.
+   * Adapters that register no balance query (and routes outside the
+   * configurable directory) surface a structured error — the caller reads it
+   * as "unsupported", not a transport fault. The reply is account-level
+   * financial data of the host's stored key, so the carrier restricts this
+   * method to trusted callers.
+   */
+  balance(
+    request: RpcRequest<{ provider: string }>,
+    signal?: AbortSignal,
+  ): Promise<RpcResponse<{ balances: BalanceView[] }>>
 }
 
 /** Wire view of one model an interrogated endpoint advertises. */
@@ -86,4 +102,14 @@ export interface DiscoveredModelView {
   contextWindow?: number
   /** Maximum output tokens, when disclosed. */
   maxTokens?: number
+}
+
+/** Wire view of one currency entry in a provider's account-balance report. */
+export interface BalanceView {
+  /** Currency code the provider reports (e.g. `CNY`). */
+  currency: string
+  /** Remaining spendable amount in that currency. */
+  availableBalance: number
+  /** Cumulative amount provisioned in that currency. */
+  totalBalance: number
 }

@@ -105,8 +105,10 @@ export function prepareProfile(name: string, userLayer = true): Profile {
 /** One profile's patch layers (application order) and the row index of its pre-flag composition. */
 interface ComposedProfile {
   profile: Profile
-  /** Bundle layers concatenated — the part below the user layers on a live reload. */
+  /** Bundle layers concatenated — the part below the store and user layers on a live reload. */
   bundlePatches: PatchOptions[]
+  /** The store-managed layer (`cordis.store.patch.yml`), applied between bundles and the user layers. */
+  storePatches: PatchOptions[]
   /** The home-level user layer (`$DSH_HOME/cordis.patch.yml`), applied after the profile's own. */
   homePatches: PatchOptions[]
   /** Layers above the user layers on a live reload: `--patch` overlays and the telemetry switch. */
@@ -122,6 +124,7 @@ interface ComposedProfile {
 function allPatches(composed: ComposedProfile): PatchOptions[] {
   return [
     ...composed.bundlePatches,
+    ...composed.storePatches,
     ...composed.profile.patches,
     ...composed.homePatches,
     ...composed.overlays,
@@ -131,10 +134,10 @@ function allPatches(composed: ComposedProfile): PatchOptions[] {
 /**
  * Load `name` and compose its effective patch stack: bundle layers in
  * `dsh.profile.bundles` order (the base bundle gates the shell stacks by
- * platform on its own rows), the profile's user layer, the home-level user
- * layer (`$DSH_HOME/cordis.patch.yml` — machine-local preferences that apply
- * to every profile, so it outranks the per-profile layer), `--patch` overlays,
- * then the telemetry switch.
+ * platform on its own rows), the store-managed layer, the profile's user
+ * layer, the home-level user layer (`$DSH_HOME/cordis.patch.yml` —
+ * machine-local preferences that apply to every profile, so it outranks the
+ * per-profile layer), `--patch` overlays, then the telemetry switch.
  * @param name - the profile name.
  * @param patchFiles - `--patch` overlay paths, in argv order.
  * @returns the profile, its patch layers, and the composed row index.
@@ -167,7 +170,7 @@ function composeProfile(
   }
   const telemetryPatch = resolveTelemetryPatch(process.env.DSH_TELEMETRY_DISABLED, rows.has(TELEMETRY_ROW_ID))
   if (telemetryPatch !== undefined) composedOverlays.push(telemetryPatch)
-  return { profile, bundlePatches, homePatches, overlays: composedOverlays, rows }
+  return { profile, bundlePatches, storePatches: profile.storePatches, homePatches, overlays: composedOverlays, rows }
 }
 
 /** Options for {@link runProfile}. */
@@ -228,10 +231,10 @@ export async function runProfile(options: RunProfileOptions): Promise<{ ctx: Con
   // Recomposition for the live user layers: bundle layers below, overlays
   // above, so a user edit can never displace them. Parsed app arguments are
   // not in here at all — they live in app-provided services that survive a
-  // recomposition. BOTH
-  // user files are re-read per generation (the HMR watcher hands us only the
-  // changed file's patches, which one of the reads duplicates — fresh reads
-  // keep the two watchers from stitching in each other's stale copy).
+  // recomposition. All three live files (the store layer, the profile's own,
+  // and the home layer) are re-read per generation (the HMR watcher hands us
+  // only the changed file's patches, which one of the reads duplicates —
+  // fresh reads keep the watchers from stitching in each other's stale copy).
   // Fresh clones per generation: the include pushes `insert` rows into the
   // mounted tree BY REFERENCE and later id-targeted patches mutate those
   // objects in place. Reusing one parsed patch object across applications
@@ -239,6 +242,7 @@ export async function runProfile(options: RunProfileOptions): Promise<{ ctx: Con
   // removing the override could never revert the row to the bundle default.
   const composeLive = (): PatchOptions[] => structuredClone([
     ...composed.bundlePatches,
+    ...loadOptionalPatches(NAME, composed.profile.storePatchPath) ?? [],
     ...loadOptionalPatches(NAME, composed.profile.patchPath) ?? [],
     ...loadOptionalPatches(NAME, homePatchPath()) ?? [],
     ...composed.overlays,
@@ -282,6 +286,11 @@ export async function runProfile(options: RunProfileOptions): Promise<{ ctx: Con
         }
         await ctx.loader.create({ name: '@deepseek-ai/cordis-plugin-hmr', config: { root: [] } })
       }
+      await watchUserPatches(ctx, {
+        binName: NAME,
+        filename: composed.profile.storePatchPath,
+        compose: composeLive,
+      })
       await watchUserPatches(ctx, {
         binName: NAME,
         filename: composed.profile.patchPath,

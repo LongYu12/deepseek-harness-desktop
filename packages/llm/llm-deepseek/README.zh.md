@@ -58,6 +58,8 @@ harness LLM（大语言模型）seam 的 DeepSeek chat-completions 适配器：�
 
 该插件还会在可配置提供方目录（`ctx.llm.listConfigurableProviders()`）中声明自己的路由：提供方为 `deepseek-official`，settings namespace 为 `llm-deepseek`，settings path 为空——整个分节就是 profile。配置界面借助该条目，把本适配器与休眠的 pi-ai 提供方一并呈现。
 
+除目录条目外，该插件还会在自己的 settings namespace 下注册账户余额查询（`ctx.llm.registerBalanceQuery('llm-deepseek', …)`），并随 apply fiber dispose。查询复用插件的每操作解析钩子，因此与模型请求遵循同一套端点／密钥配对规则：以 bearer 密钥和归因标头 GET `{baseURL}/user/balance`，并尊重调用方的 signal。平台的 `balance_infos` 条目按提供方顺序映射为提供方无关的 `LlmBalanceInfo` 值。非 200 响应、非 JSON 响应体和出乎意料的文档结构都以 `BALANCE_UNAVAILABLE` 失败并点名端点；响应前的传输故障以 `TRANSPORT` 失败，调用方中止以 `ABORTED` 失败——密钥解析失败则保留凭据 seam 自身的 code。
+
 ## 应用归因
 
 每个请求都携带 dsh-llm `attributionHeaders()` 的共享归因标头，即用于识别 harness 的必需 `User-Agent` 基线（见 [dsh-llm § 应用归因](../llm/README.md#app-attribution-attributionts)）。在该适配器约定（adapter contract）下，直接 DeepSeek 请求与 OpenAI 兼容 gateway 请求都不会获得提供方特定应用归因标头；OpenRouter 应用归因暂缓到未来的显式 OpenRouter 适配器或模式。`GenerateOptions.purpose` 为 `compaction` 的请求（dsh-compaction-basic 的辅助摘要调用）还会携带 `x-deepseek-harness-compact: 1`，让宿主可以将压缩流量与会话请求分开。

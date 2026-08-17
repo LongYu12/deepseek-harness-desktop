@@ -27,6 +27,7 @@ import {
   DeepSeekAdapter,
 } from './adapter.ts'
 import type { DeepSeekCatalogModel, DeepSeekConnectionOptions } from './adapter.ts'
+import { createDeepSeekBalanceQuery } from './balance.ts'
 
 export {
   DEFAULT_CONTEXT_WINDOW,
@@ -35,6 +36,8 @@ export {
   DeepSeekAdapter,
 } from './adapter.ts'
 export type { DeepSeekAdapterOptions, DeepSeekCatalogModel, DeepSeekConnectionOptions } from './adapter.ts'
+export { createDeepSeekBalanceQuery, mapDeepSeekBalanceResponse } from './balance.ts'
+export type { DeepSeekBalanceQueryOptions } from './balance.ts'
 export type { RequestDefaults } from './serialize.ts'
 export type * from './types.ts'
 
@@ -248,6 +251,10 @@ export function apply(ctx: Context, config: Config): void {
   let userId: AnonymousUserId | undefined
   const resolveUserId = (): AnonymousUserId => userId ??= getOrCreateAnonymousUserId()
   const adapter = new DeepSeekAdapter({ options, resolveApiKey, resolveUserId })
+  // The platform serves the account balance beside chat completions; the
+  // query reuses this plugin's resolution hooks, so it follows the same
+  // endpoint/key pairing rule as model requests.
+  ctx.llm.registerBalanceQuery(NS, createDeepSeekBalanceQuery({ options, resolveApiKey }))
   ctx.llm.registerConfigurableProviders([
     { provider: PROVIDER, displayName: 'DeepSeek', settingsNs: NS, settingsPath: [] },
   ])

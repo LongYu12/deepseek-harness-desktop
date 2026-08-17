@@ -14,8 +14,10 @@ import {
   initProfile,
   loadProfile,
   PROFILE_PATCH_FILENAME,
+  PROFILE_STORE_PATCH_FILENAME,
   PROFILE_TEMPLATES,
   readProfileManifest,
+  reconcileBundles,
   resolveBundleDir,
   resolveProfileDir,
   writeProfileManifest,
@@ -194,6 +196,85 @@ describe('loadProfile', () => {
     const dir = resolveProfileDir('demo', home)
     initProfile(dir, ['not-a-bundle'])
     expect(() => loadProfile('t', 'demo', anchor, home)).toThrow('declares no dsh.bundle')
+  })
+
+  it('loads the store-managed layer between the bundles and the user layer', () => {
+    const anchor = stageInstallation({
+      'bundle-a': { patch: '- insert:\n    - id: a\n      name: pkg-a\n' },
+    })
+    const home = tmp()
+    const dir = resolveProfileDir('demo', home)
+    initProfile(dir, ['bundle-a'])
+    // No store layer yet: empty patches, path still seated for the watcher.
+    let profile = loadProfile('t', 'demo', anchor, home)
+    expect(profile.storePatchPath).toBe(join(dir, PROFILE_STORE_PATCH_FILENAME))
+    expect(profile.storePatches).toEqual([])
+    // The store disables the row; the user layer overrides it back on.
+    writeFileSync(profile.storePatchPath, '- id: a\n  disabled: true\n')
+    writeFileSync(join(dir, PROFILE_PATCH_FILENAME), '- id: a\n  disabled: false\n')
+    profile = loadProfile('t', 'demo', anchor, home)
+    expect(profile.storePatches).toEqual([{ id: 'a', disabled: true }])
+    const entries = composeEntries([
+      ...profile.layers.map(layer => layer.patches),
+      profile.storePatches,
+      profile.patches,
+    ])
+    expect(entries).toEqual([{ id: 'a', name: 'pkg-a', disabled: false }])
+    // Without the user override the store disable lands.
+    rmSync(join(dir, PROFILE_PATCH_FILENAME))
+    profile = loadProfile('t', 'demo', anchor, home)
+    const disabled = composeEntries([
+      ...profile.layers.map(layer => layer.patches),
+      profile.storePatches,
+      profile.patches,
+    ])
+    expect(disabled).toEqual([{ id: 'a', name: 'pkg-a', disabled: true }])
+    // A broken store layer fails loud at load, never silently skipped.
+    writeFileSync(profile.storePatchPath, '{ not: an array')
+    expect(() => loadProfile('t', 'demo', anchor, home)).toThrow('failed to parse')
+  })
+})
+
+describe('reconcileBundles', () => {
+  const bundlesOf = (names: string[]): Record<string, string> => Object.fromEntries(names.map(name => [name, '0.0.0']))
+
+  it('adds a new bundle-declaring dependency and reports bundle-less additions', () => {
+    const before = { dependencies: bundlesOf(['kept-bundle']), dsh: { profile: { bundles: ['kept-bundle'] } } }
+    const after = {
+      dependencies: bundlesOf(['kept-bundle', 'new-bundle', 'plain-lib']),
+      dsh: { profile: { bundles: ['kept-bundle'] } },
+    }
+    const result = reconcileBundles(before, after, name => name !== 'plain-lib')
+    expect(result.manifest?.dsh?.profile?.bundles).toEqual(['kept-bundle', 'new-bundle'])
+    expect(result.nonBundleAdditions).toEqual(['plain-lib'])
+  })
+
+  it('drops a removed or bundle-less dependency entry but never a template bundle', () => {
+    const before = {
+      dependencies: bundlesOf(['gone-bundle', 'dropped-bundle']),
+      dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', 'gone-bundle', 'dropped-bundle'] } },
+    }
+    // gone-bundle vanished from the dependencies; dropped-bundle stayed but
+    // lost its dsh.bundle declaration in the installed version.
+    const after = {
+      dependencies: bundlesOf(['dropped-bundle']),
+      dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', 'gone-bundle', 'dropped-bundle'] } },
+    }
+    const result = reconcileBundles(before, after, () => false)
+    expect(result.manifest?.dsh?.profile?.bundles).toEqual(['@deepseek-ai/dsh-base'])
+    expect(result.nonBundleAdditions).toEqual([])
+  })
+
+  it('returns no manifest when nothing changed', () => {
+    const manifest = { dependencies: bundlesOf(['a-bundle']), dsh: { profile: { bundles: ['a-bundle'] } } }
+    const result = reconcileBundles(manifest, manifest, () => true)
+    expect(result.manifest).toBeUndefined()
+    expect(result.nonBundleAdditions).toEqual([])
+  })
+
+  it('tolerates manifests without dependencies or a dsh section', () => {
+    const result = reconcileBundles({}, { dependencies: bundlesOf(['new-bundle']) }, () => true)
+    expect(result.manifest?.dsh?.profile?.bundles).toEqual(['new-bundle'])
   })
 })
 

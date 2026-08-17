@@ -777,3 +777,57 @@ describe('llm.discoverModels', () => {
     expect(error.message).toContain('no model discovery is registered')
   })
 })
+
+describe('llm.balance', () => {
+  it('resolves the provider through the directory and reports the query answer', async () => {
+    const ctx = await harness()
+    let received: AbortSignal | undefined
+    ctx.llm.registerBalanceQuery('llm-deepseek', (signal) => {
+      received = signal
+      return Promise.resolve([{ currency: 'CNY', availableBalance: 12.5, totalBalance: 100 }])
+    })
+    const api = createApiProxy(ctx, DEFAULTS)
+
+    const controller = new AbortController()
+    const value = expectOk(await api.llm.balance(request({ provider: 'deepseek-official' }), controller.signal))
+
+    expect(value.balances).toEqual([{ currency: 'CNY', availableBalance: 12.5, totalBalance: 100 }])
+    // The carrier signal rides through to the adapter's wire interrogation.
+    expect(received).toBe(controller.signal)
+  })
+
+  it('reports a route the directory does not declare as unsupported', async () => {
+    const ctx = await harness()
+    const api = createApiProxy(ctx, DEFAULTS)
+
+    const error = expectErr(await api.llm.balance(request({ provider: 'undeclared' })))
+
+    expect(error.code).toBe('balance-unsupported')
+    expect(error.details).toEqual({ provider: 'undeclared' })
+  })
+
+  it('reports a declared route whose adapter registered no balance query as unsupported', async () => {
+    const ctx = await harness()
+    const api = createApiProxy(ctx, DEFAULTS)
+
+    // The harness declares deepseek-official but no adapter mounted a query.
+    const error = expectErr(await api.llm.balance(request({ provider: 'deepseek-official' })))
+
+    expect(error.code).toBe('balance-unsupported')
+    expect(error.message).toContain('no balance query is registered')
+    expect(error.details).toEqual({ provider: 'deepseek-official' })
+  })
+
+  it('maps a failed interrogation onto the surface\'s next move', async () => {
+    const ctx = await harness()
+    ctx.llm.registerBalanceQuery('llm-deepseek', () =>
+      Promise.reject(new Error('https://api.deepseek.com/user/balance answered 403; check the API key')))
+    const api = createApiProxy(ctx, DEFAULTS)
+
+    const error = expectErr(await api.llm.balance(request({ provider: 'deepseek-official' })))
+
+    expect(error.code).toBe('balance-query-failed')
+    expect(error.message).toContain('answered 403; check the API key')
+    expect(error.details).toEqual({ provider: 'deepseek-official' })
+  })
+})

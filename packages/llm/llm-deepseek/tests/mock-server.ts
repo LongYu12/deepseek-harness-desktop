@@ -6,6 +6,8 @@ export type Behavior =
   | { kind: 'sse'; events: string[]; delayMs?: number }
   | { kind: 'http-error'; status: number; body: string; contentType?: string; headers?: Record<string, string> }
   | { kind: 'close-early'; events: string[] }
+  /** One JSON document answer (the `/user/balance` route). */
+  | { kind: 'json'; body: string; status?: number }
 
 export interface MockServer {
   url: string
@@ -13,6 +15,8 @@ export interface MockServer {
   requests: unknown[]
   /** Header bags of received requests, in order (parallel to `requests`). */
   headers: IncomingMessage['headers'][]
+  /** Request paths of received requests, in order (parallel to `requests`). */
+  paths: string[]
   script: Behavior[]
   close(): Promise<void>
 }
@@ -36,12 +40,15 @@ export const textEvents = [
 export async function mockServer(script: Behavior[]): Promise<MockServer> {
   const requests: unknown[] = []
   const headers: IncomingMessage['headers'][] = []
+  const paths: string[] = []
   const server = createServer((request: IncomingMessage, response: ServerResponse) => {
     let body = ''
     request.on('data', (chunk: Buffer) => { body += chunk.toString('utf8') })
     request.on('end', () => {
-      requests.push(JSON.parse(body))
+      // A GET (the balance route) carries no body to parse.
+      requests.push(body.length > 0 ? JSON.parse(body) : null)
       headers.push(request.headers)
+      paths.push(request.url ?? '')
       const behavior = script.shift()
       if (!behavior) {
         response.writeHead(500).end('mock script exhausted')
@@ -52,6 +59,11 @@ export async function mockServer(script: Behavior[]): Promise<MockServer> {
           'content-type': behavior.contentType ?? 'application/json',
           ...behavior.headers,
         })
+        response.end(behavior.body)
+        return
+      }
+      if (behavior.kind === 'json') {
+        response.writeHead(behavior.status ?? 200, { 'content-type': 'application/json' })
         response.end(behavior.body)
         return
       }
@@ -76,6 +88,7 @@ export async function mockServer(script: Behavior[]): Promise<MockServer> {
     url: `http://127.0.0.1:${address.port}`,
     requests,
     headers,
+    paths,
     script,
     close: () => new Promise(resolve => server.close(() => { resolve() })),
   }

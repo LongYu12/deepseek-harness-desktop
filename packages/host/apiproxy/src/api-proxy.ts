@@ -3424,6 +3424,36 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           })
         }
       },
+
+      async balance(request, signal) {
+        const { provider } = request.payload
+        // The directory is the provider→namespace map: a route it does not
+        // declare names no settings namespace, so no balance query could
+        // answer for it.
+        const entry = ctx.llm.listConfigurableProviders()
+          .find(candidate => candidate.provider === provider)
+        if (entry === undefined) {
+          return err(request, {
+            code: 'balance-unsupported',
+            message: `provider "${provider}" has no balance query`,
+            details: { provider },
+          })
+        }
+        try {
+          const balances = await ctx.llm.queryBalance(entry.settingsNs, signal)
+          return ok(request, { balances })
+        } catch (error: unknown) {
+          // Like discovery, every failure is the surface's next move, not a
+          // transport fault: a missing key, a refused endpoint, or an adapter
+          // that registers no query all end where the caller shows no balance.
+          // Details repeat only the provider the caller already sent.
+          const message = error instanceof Error ? error.message : String(error)
+          if ((error as { code?: unknown } | undefined)?.code === 'NO_BALANCE_QUERY') {
+            return err(request, { code: 'balance-unsupported', message, details: { provider } })
+          }
+          return err(request, { code: 'balance-query-failed', message, details: { provider } })
+        }
+      },
     },
 
     events: {

@@ -35,9 +35,11 @@ export {
   initProfile,
   loadProfile,
   PROFILE_PATCH_FILENAME,
+  PROFILE_STORE_PATCH_FILENAME,
   PROFILE_TEMPLATES,
   PROFILES_DIR,
   readProfileManifest,
+  reconcileBundles,
   resolveBundleDir,
   resolveProfileDir,
   writeProfileManifest,
@@ -47,6 +49,7 @@ export {
   type Profile,
   type ProfileLayer,
   type ProfileManifest,
+  type ReconcileBundlesResult,
 } from './profile.ts'
 
 /**

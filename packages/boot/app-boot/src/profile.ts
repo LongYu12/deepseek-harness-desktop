@@ -9,8 +9,10 @@
  * npm packages whose manifest declares
  * `"dsh": { "bundle": { "patch": "./cordis.patch.yml" } }`; the tree is
  * composed by applying each bundle's patch list in `dsh.profile.bundles` order over
- * an empty entry list, then the profile's own patches, then any launcher
- * layers (`--patch` files and flag-derived patches).
+ * an empty entry list, then the store-managed layer (`cordis.store.patch.yml`,
+ * written exclusively by the plugin store for entry enable/disable), then the
+ * profile's own patches, then any launcher layers (`--patch` files and
+ * flag-derived patches).
  *
  * Module resolution is two-anchor by construction: a bundle name resolves
  * first from the dsh installation (the launcher's own package), then from the
@@ -30,13 +32,22 @@ import { basename, dirname, join } from 'node:path'
 import type { EntryOptions } from '@deepseek-ai/cordis-plugin-loader'
 import { applyEntryPatches, type PatchOptions } from '@deepseek-ai/cordis-plugin-include'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
-import { loadOverlayPatches } from './index.ts'
+import { loadOptionalPatches, loadOverlayPatches } from './index.ts'
 
 /** Directory under the Harness home holding every profile. */
 export const PROFILES_DIR = 'profiles'
 
 /** The user patch layer inside a profile directory (hot-reloaded on long-lived surfaces). */
 export const PROFILE_PATCH_FILENAME = 'cordis.patch.yml'
+
+/**
+ * The store-managed patch layer inside a profile directory (hot-reloaded on
+ * long-lived surfaces). The plugin store owns this file exclusively — it
+ * writes id-targeted enable/disable entries here instead of rewriting the
+ * user's own layer, which may hold comments and `!!js` expressions a
+ * machine rewrite would destroy.
+ */
+export const PROFILE_STORE_PATCH_FILENAME = 'cordis.store.patch.yml'
 
 /** The bundle half of the `dsh` manifest section: what a bundle package exports. */
 export interface DshBundleManifest {
@@ -81,7 +92,7 @@ export interface ProfileLayer {
   patches: PatchOptions[]
 }
 
-/** A loaded profile: resolved bundle layers plus the user's own patch layer. */
+/** A loaded profile: resolved bundle layers plus the store and user patch layers. */
 export interface Profile {
   /** The profile name (its directory basename). */
   name: string
@@ -89,6 +100,10 @@ export interface Profile {
   dir: string
   /** Bundle layers in `dsh.profile.bundles` order. */
   layers: ProfileLayer[]
+  /** Absolute path of the store-managed patch file. */
+  storePatchPath: string
+  /** The store-managed patches; empty when the file is absent. */
+  storePatches: PatchOptions[]
   /** Absolute path of the profile's own patch file. */
   patchPath: string
   /** The profile's own patches; empty when the file is absent. */
@@ -395,11 +410,80 @@ export function loadProfile(
     const patchPath = join(packageDir, declared)
     return { packageName, packageDir, patchPath, patches: loadOverlayPatches(binName, patchPath) }
   })
+  const storePatchPath = join(dir, PROFILE_STORE_PATCH_FILENAME)
+  const storePatches = loadOptionalPatches(binName, storePatchPath) ?? []
   const patchPath = join(dir, PROFILE_PATCH_FILENAME)
   const patches = options.userLayer !== false && existsSync(patchPath)
     ? loadOverlayPatches(binName, patchPath)
     : []
-  return { name, dir, layers, patchPath, patches }
+  return { name, dir, layers, storePatchPath, storePatches, patchPath, patches }
+}
+
+/** The outcome of one {@link reconcileBundles} run. */
+export interface ReconcileBundlesResult {
+  /**
+   * The manifest with the updated `dsh.profile.bundles` list, or `undefined`
+   * when the list is unchanged and nothing needs writing back.
+   */
+  manifest?: ProfileManifest
+  /**
+   * Dependencies new in `after` that declare no `dsh.bundle` — plain
+   * libraries a caller may want to warn about (they are installed, just not
+   * a profile layer; a later version gaining the declaration activates them).
+   */
+  nonBundleAdditions: string[]
+}
+
+/**
+ * Reconcile `dsh.profile.bundles` against the installed dependency state:
+ * a dependency that resolves to a `dsh.bundle`-declaring package joins the
+ * layer stack (appended in dependency order); a dependency-listed name that
+ * no longer does — removed, or the installed version dropped the
+ * declaration — leaves it. Reconciling by installed state, not by dependency
+ * diff, means an update activates a package that gained its `dsh.bundle`
+ * declaration in a newer version. Template bundles that are not dependencies
+ * are never touched. Pure: the caller owns reading the manifests, the
+ * `isBundle` probe (resolution anchors differ per surface), and writing the
+ * returned manifest back.
+ * @param before - the manifest as read before the package-manager run.
+ * @param after - the manifest as read after the package-manager run.
+ * @param isBundle - whether a resolved dependency exports a profile patch.
+ * @returns the changed manifest (or none) plus bundle-less new dependencies.
+ */
+export function reconcileBundles(
+  before: ProfileManifest,
+  after: ProfileManifest,
+  isBundle: (packageName: string) => boolean,
+): ReconcileBundlesResult {
+  const beforeDeps = new Set(Object.keys(before.dependencies ?? {}))
+  const dependencies = Object.keys(after.dependencies ?? {})
+  const dependencySet = new Set(dependencies)
+  const plugins = [...after.dsh?.profile?.bundles ?? []]
+  const nonBundleAdditions: string[] = []
+  let changed = false
+  for (const packageName of dependencies) {
+    if (isBundle(packageName) && !plugins.includes(packageName)) {
+      plugins.push(packageName)
+      changed = true
+    } else if (!isBundle(packageName) && !beforeDeps.has(packageName)) {
+      nonBundleAdditions.push(packageName)
+    }
+  }
+  for (const packageName of [...plugins]) {
+    // Only dependency-managed entries are subject to removal; template
+    // bundles (dsh-base and friends) are not dependencies.
+    const wasDependency = beforeDeps.has(packageName) || dependencySet.has(packageName)
+    const stillBundle = dependencySet.has(packageName) && isBundle(packageName)
+    if (wasDependency && !stillBundle) {
+      plugins.splice(plugins.indexOf(packageName), 1)
+      changed = true
+    }
+  }
+  if (!changed) return { nonBundleAdditions }
+  return {
+    manifest: { ...after, dsh: { ...after.dsh, profile: { ...after.dsh?.profile, bundles: plugins } } },
+    nonBundleAdditions,
+  }
 }
 
 /**

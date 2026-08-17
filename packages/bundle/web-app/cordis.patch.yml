@@ -66,6 +66,10 @@
       config:
         maxNoteBytes: 8192
 
+    # Browser Session Header balance capsule, left of the Session log button.
+    - id: ui-balance-indicator
+      name: '@deepseek-ai/dsh-client-ui-balance-indicator'
+
     # Browser Session export: `/export` command plus the shared download dialog.
     - id: session-log-download
       name: '@deepseek-ai/dsh-session-log-export'
@@ -93,6 +97,14 @@
     # Read-only projection of current Loader entries for trusted client RPCs.
     - id: plugin-inventory
       name: '@deepseek-ai/dsh-host-plugin-inventory'
+
+    # Plugin store gateway: catalog browsing plus install/remove/update and
+    # entry enable/disable over the active profile. Set `indexUrl` to override
+    # the built-in catalog with a remote index.
+    - id: plugin-store
+      name: '@deepseek-ai/dsh-host-plugin-store'
+      config:
+        indexUrl: ''
 
     # The API gateway: the transport-agnostic dispatch face every client shape
     # shares. The base layer's agent-default-model service owns the default model.
@@ -194,6 +206,9 @@
 
     - id: ui-settings-plugin-inventory
       name: '@deepseek-ai/dsh-client-ui-settings-plugin-inventory'
+
+    - id: ui-settings-plugin-store
+      name: '@deepseek-ai/dsh-client-ui-settings-plugin-store'
 
     - id: ui-conversation
       name: '@deepseek-ai/dsh-client-ui-conversation'

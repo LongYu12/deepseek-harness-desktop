@@ -9,6 +9,8 @@
 import { Context, Service } from '@deepseek-ai/cordis'
 import type {
   GenerateOptions,
+  LlmBalanceInfo,
+  LlmBalanceQuery,
   LlmConfigurableProvider,
   LlmDiscoveredModel,
   LlmFailure,
@@ -288,6 +290,7 @@ export class LlmRuntime extends Service {
     string,
     (request: LlmModelDiscoveryRequest) => Promise<readonly LlmDiscoveredModel[]>
   >()
+  private balances = new Map<string, LlmBalanceQuery>()
 
   constructor(ctx: Context) {
     super(ctx, 'llm')
@@ -556,6 +559,63 @@ export class LlmRuntime extends Service {
       })
     }
     return models
+  }
+
+  /**
+   * Offer to interrogate the account balance one settings namespace's
+   * credential serves. The namespace keys the offer the same way it keys
+   * model discovery: it names the provider whose endpoint and credential the
+   * query resolves, and a balance query reads stored configuration rather
+   * than a caller-supplied draft. Disposed with the fiber.
+   * @param settingsNs - the namespace whose provider this balance query serves.
+   * @param query - interrogates the provider's balance endpoint; must honor an optional signal.
+   * @returns the disposer that withdraws the offer.
+   */
+  registerBalanceQuery(settingsNs: string, query: LlmBalanceQuery): () => void {
+    const dispose = this.ctx.effect(function* (this: LlmRuntime) {
+      if (settingsNs.length === 0) {
+        throw new LlmError('a balance query needs a non-empty settings namespace', 'INVALID_BALANCE_QUERY')
+      }
+      if (this.balances.has(settingsNs)) {
+        throw new LlmError(`a balance query for "${settingsNs}" is already registered`, 'DUPLICATE_BALANCE_QUERY')
+      }
+      this.balances.set(settingsNs, query)
+      yield () => {
+        this.balances.delete(settingsNs)
+      }
+    }.bind(this), 'llm.registerBalanceQuery()')
+    return () => void dispose()
+  }
+
+  /**
+   * Interrogate the account balance served by one settings namespace's
+   * registered query. Every returned entry is validated and detached from
+   * provider-owned objects; absence of a registration is the unsupported
+   * signal consumers surface, never an empty or zero balance.
+   * @param settingsNs - namespace whose registered balance query serves.
+   * @param signal - optional cancellation for the provider interrogation.
+   * @returns every currency entry the provider reports, in provider order.
+   */
+  async queryBalance(settingsNs: string, signal?: AbortSignal): Promise<LlmBalanceInfo[]> {
+    const query = this.balances.get(settingsNs)
+    if (query === undefined) {
+      throw new LlmError(`no balance query is registered for "${settingsNs}"`, 'NO_BALANCE_QUERY')
+    }
+    const entries = await query(signal)
+    return entries.map((entry) => {
+      if (
+        typeof entry.currency !== 'string' || entry.currency.length === 0
+        || !Number.isFinite(entry.availableBalance)
+        || !Number.isFinite(entry.totalBalance)
+      ) {
+        throw new LlmError(`balance query for "${settingsNs}" returned an invalid entry`, 'INVALID_BALANCE')
+      }
+      return {
+        currency: entry.currency,
+        availableBalance: entry.availableBalance,
+        totalBalance: entry.totalBalance,
+      }
+    })
   }
 
   /**

@@ -780,6 +780,29 @@ registerModelDiscovery( settingsNs: string, discover: (request: LlmModelDiscover
 async discoverModels( settingsNs: string, request: LlmModelDiscoveryRequest, ): Promise<LlmDiscoveredModel[]>
 
 /**
+ * Offer to interrogate the account balance one settings namespace's
+ * credential serves. The namespace keys the offer the same way it keys
+ * model discovery: it names the provider whose endpoint and credential the
+ * query resolves, and a balance query reads stored configuration rather
+ * than a caller-supplied draft. Disposed with the fiber.
+ * @param settingsNs - the namespace whose provider this balance query serves.
+ * @param query - interrogates the provider's balance endpoint; must honor an optional signal.
+ * @returns the disposer that withdraws the offer.
+ */
+registerBalanceQuery(settingsNs: string, query: LlmBalanceQuery): () => void
+
+/**
+ * Interrogate the account balance served by one settings namespace's
+ * registered query. Every returned entry is validated and detached from
+ * provider-owned objects; absence of a registration is the unsupported
+ * signal consumers surface, never an empty or zero balance.
+ * @param settingsNs - namespace whose registered balance query serves.
+ * @param signal - optional cancellation for the provider interrogation.
+ * @returns every currency entry the provider reports, in provider order.
+ */
+async queryBalance(settingsNs: string, signal?: AbortSignal): Promise<LlmBalanceInfo[]>
+
+/**
  * Resolve the retry policy captured when one provider route was registered.
  * @param provider - registered provider route to inspect.
  * @returns the provider-owned policy, with normal defaults already resolved.
@@ -841,7 +864,7 @@ async prepareCall(config: LlmCallConfig, signal?: AbortSignal): Promise<Prepared
 stream(options: GenerateOptions): AsyncIterable<StreamChunk>
 ```
 
-Source: [`packages/llm/llm/src/index.ts:284`](../../packages/llm/llm/src/index.ts)
+Source: [`packages/llm/llm/src/index.ts:286`](../../packages/llm/llm/src/index.ts)
 
 <a id="llm-events"></a>
 
@@ -890,5 +913,5 @@ Waterfall around every streaming model call (retry, replay, routing). Bound to t
 'llm/stream'(this: LlmRuntime, options: GenerateOptions, next: () => AsyncIterable<StreamChunk>): AsyncIterable<StreamChunk>
 ```
 
-Source: [`packages/llm/llm/src/index.ts:64`](../../packages/llm/llm/src/index.ts)
+Source: [`packages/llm/llm/src/index.ts:66`](../../packages/llm/llm/src/index.ts)
 <!-- END GENERATED cordis-surface -->

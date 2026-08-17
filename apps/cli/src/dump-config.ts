@@ -34,6 +34,9 @@ export function runDumpConfig(profile: string, defaultOnly: boolean, patches: re
     patches: layer.patches,
   }))
   if (!defaultOnly) {
+    if (existsSync(loaded.storePatchPath)) {
+      layers.push({ label: loaded.storePatchPath, patches: loaded.storePatches })
+    }
     if (existsSync(loaded.patchPath)) {
       layers.push({ label: loaded.patchPath, patches: loaded.patches })
     }

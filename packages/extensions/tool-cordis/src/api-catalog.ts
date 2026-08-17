@@ -825,6 +825,18 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the advertised models, deduplicated in endpoint order.',
       },
       {
+        signature: 'registerBalanceQuery(settingsNs: string, query: LlmBalanceQuery): () => void',
+        description: 'Offer to interrogate the account balance one settings namespace\'s credential serves. The namespace keys the offer the same way it keys model discovery: it names the provider whose endpoint and credential the query resolves, and a balance query reads stored configuration rather than a caller-supplied draft. Disposed with the fiber.',
+        parameters: [{ name: 'settingsNs', description: 'the namespace whose provider this balance query serves.' }, { name: 'query', description: 'interrogates the provider\'s balance endpoint; must honor an optional signal.' }],
+        returns: 'the disposer that withdraws the offer.',
+      },
+      {
+        signature: 'async queryBalance(settingsNs: string, signal?: AbortSignal): Promise<LlmBalanceInfo[]>',
+        description: 'Interrogate the account balance served by one settings namespace\'s registered query. Every returned entry is validated and detached from provider-owned objects; absence of a registration is the unsupported signal consumers surface, never an empty or zero balance.',
+        parameters: [{ name: 'settingsNs', description: 'namespace whose registered balance query serves.' }, { name: 'signal', description: 'optional cancellation for the provider interrogation.' }],
+        returns: 'every currency entry the provider reports, in provider order.',
+      },
+      {
         signature: 'providerRetryPolicy(provider: string): ResolvedRetryPolicy',
         description: 'Resolve the retry policy captured when one provider route was registered.',
         parameters: [{ name: 'provider', description: 'registered provider route to inspect.' }],
@@ -3266,6 +3278,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export abstract class LlmAdapter {\n    providerInfo(provider: string): LlmProviderInfo;\n    providerRetryPolicy(_provider: string): ResolvedRetryPolicy | undefined;\n    listModels(_provider: string): Promise<readonly LlmModelInfo[]>;\n    resolveModel(provider: string, model: string, _signal?: AbortSignal): Promise<LlmResolvedModelInfo>;\n    abstract stream(options: GenerateOptions): AsyncIterable<StreamChunk>;\n}',
   },
   {
+    name: 'LlmBalanceInfo',
+    declaration: 'export interface LlmBalanceInfo {\n    currency: string;\n    availableBalance: number;\n    totalBalance: number;\n}',
+  },
+  {
+    name: 'LlmBalanceQuery',
+    declaration: 'export type LlmBalanceQuery = (signal?: AbortSignal) => Promise<readonly LlmBalanceInfo[]>;',
+  },
+  {
     name: 'LlmCallConfig',
     declaration: 'export interface LlmCallConfig {\n    provider: string;\n    model: string;\n    reasoningEffort?: ReasoningEffortId;\n    temperature?: number;\n    maxTokens?: number;\n    stop?: string[];\n}',
   },
@@ -3315,7 +3335,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'LlmRuntime',
-    declaration: 'export class LlmRuntime extends Service {\n    constructor(ctx: Context);\n    registerAdapter(providers: string[], adapter: LlmAdapter): AdapterRegistrationHandle;\n    listProviders(): LlmProviderInfo[];\n    registerConfigurableProviders(entries: readonly LlmConfigurableProvider[]): DirectoryRegistrationHandle;\n    listConfigurableProviders(): LlmConfigurableProvider[];\n    registerModelDiscovery(settingsNs: string, discover: (request: LlmModelDiscoveryRequest) => Promise<readonly LlmDiscoveredModel[]>): () => void;\n    async discoverModels(settingsNs: string, request: LlmModelDiscoveryRequest): Promise<LlmDiscoveredModel[]>;\n    providerRetryPolicy(provider: string): ResolvedRetryPolicy;\n    async listModels(provider: string): Promise<LlmModelInfo[]>;\n    async resolveModelInfo(provider: string, model: string, signal?: AbortSignal): Promise<LlmResolvedModelInfo>;\n    async resolveCallConfig(config: LlmCallConfig, signal?: AbortSignal): Promise<LlmCallConfig>;\n    async prepareCall(config: LlmCallConfig, signal?: AbortSignal): Promise<PreparedLlmCall>;\n    stream(options: GenerateOptions): AsyncIterable<StreamChunk>;\n}',
+    declaration: 'export class LlmRuntime extends Service {\n    constructor(ctx: Context);\n    registerAdapter(providers: string[], adapter: LlmAdapter): AdapterRegistrationHandle;\n    listProviders(): LlmProviderInfo[];\n    registerConfigurableProviders(entries: readonly LlmConfigurableProvider[]): DirectoryRegistrationHandle;\n    listConfigurableProviders(): LlmConfigurableProvider[];\n    registerModelDiscovery(settingsNs: string, discover: (request: LlmModelDiscoveryRequest) => Promise<readonly LlmDiscoveredModel[]>): () => void;\n    async discoverModels(settingsNs: string, request: LlmModelDiscoveryRequest): Promise<LlmDiscoveredModel[]>;\n    registerBalanceQuery(settingsNs: string, query: LlmBalanceQuery): () => void;\n    async queryBalance(settingsNs: string, signal?: AbortSignal): Promise<LlmBalanceInfo[]>;\n    providerRetryPolicy(provider: string): ResolvedRetryPolicy;\n    async listModels(provider: string): Promise<LlmModelInfo[]>;\n    async resolveModelInfo(provider: string, model: string, signal?: AbortSignal): Promise<LlmResolvedModelInfo>;\n    async resolveCallConfig(config: LlmCallConfig, signal?: AbortSignal): Promise<LlmCallConfig>;\n    async prepareCall(config: LlmCallConfig, signal?: AbortSignal): Promise<PreparedLlmCall>;\n    stream(options: GenerateOptions): AsyncIterable<StreamChunk>;\n}',
   },
   {
     name: 'LspHover',

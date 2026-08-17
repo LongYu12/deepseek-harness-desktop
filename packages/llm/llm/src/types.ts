@@ -229,6 +229,26 @@ export interface LlmDiscoveredModel {
   maxTokens?: number
 }
 
+/** One currency entry from a provider's account-balance report. */
+export interface LlmBalanceInfo {
+  /** Currency code the provider reports (e.g. `CNY`). */
+  currency: string
+  /** Remaining spendable amount in that currency. */
+  availableBalance: number
+  /** Cumulative amount provisioned in that currency. */
+  totalBalance: number
+}
+
+/**
+ * Interrogates the account balance the credential of one settings namespace
+ * serves. Registered per namespace with `LlmRuntime.registerBalanceQuery()`;
+ * an adapter whose provider exposes no balance endpoint registers none, and
+ * consumers must treat absence as unsupported rather than zero.
+ * @param signal - caller cancellation; implementations must settle promptly after it aborts.
+ * @returns every currency entry the provider reports, in provider order.
+ */
+export type LlmBalanceQuery = (signal?: AbortSignal) => Promise<readonly LlmBalanceInfo[]>
+
 /** One adapter-discovered model; catalog membership is advisory, not request validation. */
 export interface LlmModelInfo {
   /** Provider route that owns this model entry. */

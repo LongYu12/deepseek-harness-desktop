@@ -2961,6 +2961,21 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
       discoverModels: request => ok(request, {
         models: fixtureModelGroups().flatMap(group => group.models.map(model => ({ id: model.id, name: model.name }))),
       }),
+      // Mirrors the host: only the DeepSeek adapter registers a balance
+      // query, so the fixture answers for that route alone and reports every
+      // other route as unsupported — both states a surface must render.
+      balance: (request) => {
+        if (request.payload.provider !== 'deepseek-official') {
+          return err(request, {
+            code: 'balance-unsupported',
+            message: `provider "${request.payload.provider}" has no balance query`,
+            details: { provider: request.payload.provider },
+          })
+        }
+        return ok(request, {
+          balances: [{ currency: 'CNY', availableBalance: 12.5, totalBalance: 100 }],
+        })
+      },
     },
     respond(message: ClientResponse): Promise<RpcReceipt> {
       // Same routing discipline as the host: rpcId first, then the payload's
@@ -3129,6 +3144,7 @@ export class FixtureApiClient extends AbstractApiClient {
       case 'llm.providers': return this.api.llm.providers(request)
       case 'llm.models': return this.api.llm.models(request)
       case 'llm.discoverModels': return this.api.llm.discoverModels(request, signal)
+      case 'llm.balance': return this.api.llm.balance(request, signal)
     }
   }
 

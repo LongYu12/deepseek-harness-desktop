@@ -17,6 +17,8 @@
 - `ctx.llm.registerModelDiscovery(settingsNs: string, discover): () => void` 为本插件拥有的 settings namespace 提供查询提供方端点的能力。每个 namespace 只能有一个（`INVALID_DISCOVERY`/`DUPLICATE_DISCOVERY`），并随调用 fiber dispose。
 - `ctx.llm.listModelDiscoveryNamespaces(): string[]` 列出可以询问端点的 namespace，让界面只在可用之处提供该动作。
 - `ctx.llm.discoverModels(settingsNs: string, request: LlmModelDiscoveryRequest): Promise<LlmDiscoveredModel[]>` 询问某个端点它公布了哪些模型。
+- `ctx.llm.registerBalanceQuery(settingsNs: string, query: LlmBalanceQuery): () => void` 为某个 settings namespace 的凭据所服务的账户余额提供查询能力。namespace 对该提议的键控方式与模型发现一致：它点名查询将解析其端点与凭据的提供方，且查询读取的是已存储配置，而非调用方提供的草稿。每个 namespace 只能有一个（`INVALID_BALANCE_QUERY`/`DUPLICATE_BALANCE_QUERY`），并随调用 fiber dispose。
+- `ctx.llm.queryBalance(settingsNs: string, signal?: AbortSignal): Promise<LlmBalanceInfo[]>` 询问某个 settings namespace 已注册查询所服务的账户余额。每条返回条目都会经过校验，并与提供方拥有的对象分离；未注册的 namespace 以 `NO_BALANCE_QUERY` 失败——没有注册本身就是消费方应呈现的「不支持」信号，绝不表示余额为空或为零。
 - `ctx.llm.providerRetryPolicy(provider: string): ResolvedRetryPolicy` 返回注册时捕获的提供方自身的重试策略，并解析 normal 默认值。
 - `ctx.llm.listModels(provider: string): Promise<LlmModelInfo[]>` 发现某个已注册提供方当前公布的模型。
 - `ctx.llm.resolveModelInfo(provider: string, model: string, signal?: AbortSignal): Promise<LlmResolvedModelInfo>` 从拥有该精确路由的适配器中，解析并校验确切模型身份，以及可用上下文、输出默认值和推理（reasoning）元数据；异步适配器可选地支持取消。
