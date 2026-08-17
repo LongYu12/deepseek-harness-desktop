@@ -159,11 +159,23 @@ try {
       }
       throw
     }
-    $uploadHeaders = @{ Authorization = "Bearer $token"; 'Content-Type' = 'application/octet-stream' }
     $assetName = Split-Path $installer -Leaf
-    $bytes = [System.IO.File]::ReadAllBytes($installer)
+    $uploadUri = "$($release.upload_url -replace '\{.*}$')?name=$assetName"
     Write-Host "上传 $assetName ..." -ForegroundColor Cyan
-    Invoke-RestMethod -Method Post -Uri "$($release.upload_url -replace '\{.*}$')?name=$assetName" -Headers $uploadHeaders -Body $bytes | Out-Null
+    # 优先 curl：自带进度条与断线重试，避免大文件静默挂死。
+    $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
+    if ($curl) {
+      $prevEap = $ErrorActionPreference
+      $ErrorActionPreference = 'Continue'
+      & curl.exe -L --retry 5 --retry-delay 3 --retry-all-errors --connect-timeout 20 -H "Authorization: Bearer $token" -H 'Accept: application/vnd.github+json' -H 'Content-Type: application/octet-stream' --data-binary "@$installer" -o (Join-Path $env:TEMP 'dsh-release-upload-response.json') $uploadUri
+      $ErrorActionPreference = $prevEap
+      if ($LASTEXITCODE -ne 0) { Stop-Release "curl 上传失败（exit $LASTEXITCODE），重跑脚本即可重试" }
+    } else {
+      # 无 curl 时回退到内存一次性 POST（无进度显示）。
+      $uploadHeaders = @{ Authorization = "Bearer $token"; 'Content-Type' = 'application/octet-stream' }
+      $bytes = [System.IO.File]::ReadAllBytes($installer)
+      Invoke-RestMethod -Method Post -Uri $uploadUri -Headers $uploadHeaders -Body $bytes | Out-Null
+    }
     $url = $release.html_url
   }
 
