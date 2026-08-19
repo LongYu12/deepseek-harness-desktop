@@ -51,66 +51,68 @@ export function PluginsSettingsSection({ t, renderSlot, useTabs }: PluginsSettin
 
   return (
     <div className={css.section}>
-      <h2 className={css.heading}>{t('title')}</h2>
-      <p className={css.intro}>{t('intro')}</p>
-      {rows.length === 0 ? <p className={css.empty}>{t('empty')}</p> : (
-        <>
-          <div className={css.tabs} role="tablist" aria-label={t('tabs')}>
-            {rows.map((row, index) => {
-              const selected = row.id === active
-              return (
-                <button
-                  key={row.id}
-                  ref={(element) => { tabRefs.current[index] = element }}
-                  id={`${tabsId}-tab-${row.id}`}
-                  type="button"
-                  role="tab"
-                  className={css.tab}
-                  aria-selected={selected}
-                  aria-controls={`${tabsId}-panel-${row.id}`}
-                  data-active={selected ? 'true' : undefined}
-                  tabIndex={selected ? 0 : -1}
-                  onClick={() => { setActiveId(row.id) }}
-                  onKeyDown={(event) => {
-                    let nextIndex: number
-                    switch (event.key) {
-                      case 'ArrowRight': nextIndex = (index + 1) % rows.length; break
-                      case 'ArrowLeft': nextIndex = (index - 1 + rows.length) % rows.length; break
-                      case 'Home': nextIndex = 0; break
-                      case 'End': nextIndex = rows.length - 1; break
-                      default: return
-                    }
-                    event.preventDefault()
-                    const nextRow = rows[nextIndex] as PluginsSettingsTabEntry
-                    const nextTab = tabRefs.current[nextIndex] as HTMLButtonElement
-                    setActiveId(nextRow.id)
-                    nextTab.focus()
-                  }}
-                >
-                  {row.label}
-                </button>
-              )
-            })}
-          </div>
-          {rows
-            .filter(row => row.id === active || visitedIds.has(row.id))
-            .map((row) => {
-              const selected = row.id === active
-              return (
-                <div
-                  key={row.id}
-                  id={`${tabsId}-panel-${row.id}`}
-                  className={css.panel}
-                  role="tabpanel"
-                  aria-labelledby={`${tabsId}-tab-${row.id}`}
-                  hidden={!selected}
-                >
-                  {renderSlot('settings.plugins.tab', {}, { only: row.id })}
-                </div>
-              )
-            })}
-        </>
-      )}
+      <div className={css.sticky}>
+        <h2 className={css.heading}>{t('title')}</h2>
+        <p className={css.intro}>{t('intro')}</p>
+        {rows.length === 0 ? <p className={css.empty}>{t('empty')}</p> : (
+          <>
+            <div className={css.tabs} role="tablist" aria-label={t('tabs')}>
+              {rows.map((row, index) => {
+                const selected = row.id === active
+                return (
+                  <button
+                    key={row.id}
+                    ref={(element) => { tabRefs.current[index] = element }}
+                    id={`${tabsId}-tab-${row.id}`}
+                    type="button"
+                    role="tab"
+                    className={css.tab}
+                    aria-selected={selected}
+                    aria-controls={`${tabsId}-panel-${row.id}`}
+                    data-active={selected ? 'true' : undefined}
+                    tabIndex={selected ? 0 : -1}
+                    onClick={() => { setActiveId(row.id) }}
+                    onKeyDown={(event) => {
+                      let nextIndex: number
+                      switch (event.key) {
+                        case 'ArrowRight': nextIndex = (index + 1) % rows.length; break
+                        case 'ArrowLeft': nextIndex = (index - 1 + rows.length) % rows.length; break
+                        case 'Home': nextIndex = 0; break
+                        case 'End': nextIndex = rows.length - 1; break
+                        default: return
+                      }
+                      event.preventDefault()
+                      const nextRow = rows[nextIndex] as PluginsSettingsTabEntry
+                      const nextTab = tabRefs.current[nextIndex] as HTMLButtonElement
+                      setActiveId(nextRow.id)
+                      nextTab.focus()
+                    }}
+                  >
+                    {row.label}
+                  </button>
+                )
+              })}
+            </div>
+          </>
+        )}
+      </div>
+      {rows
+        .filter(row => row.id === active || visitedIds.has(row.id))
+        .map((row) => {
+          const selected = row.id === active
+          return (
+            <div
+              key={row.id}
+              id={`${tabsId}-panel-${row.id}`}
+              className={css.panel}
+              role="tabpanel"
+              aria-labelledby={`${tabsId}-tab-${row.id}`}
+              hidden={!selected}
+            >
+              {renderSlot('settings.plugins.tab', {}, { only: row.id })}
+            </div>
+          )
+        })}
     </div>
   )
 }

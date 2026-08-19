@@ -13,7 +13,7 @@ import { spawn } from 'node:child_process'
 import { resolve } from 'node:path'
 
 /** The repository root these pipelines run from. */
-export const repositoryRoot = resolve(import.meta.dirname, '..')
+const repositoryRoot = resolve(import.meta.dirname, '..')
 
 /**
  * Render a command for logs and errors, quoting arguments with spaces.
@@ -21,7 +21,7 @@ export const repositoryRoot = resolve(import.meta.dirname, '..')
  * @param args - its arguments.
  * @returns the printable command line.
  */
-export function formatCommand(command: string, args: string[]): string {
+function formatCommand(command: string, args: string[]): string {
   return [command, ...args].map(part => (part.includes(' ') ? JSON.stringify(part) : part)).join(' ')
 }
 

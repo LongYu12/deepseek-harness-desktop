@@ -1,16 +1,20 @@
 /**
- * Cross-platform native path and text-document openers used by the local GUI
- * carrier.
+ * Cross-platform native path and text-document openers used by local GUI
+ * surfaces (the settings document action, the plugin store config shortcut).
  *
  * The default intent prefers the default browser for documents it renders when
  * the platform can name one, then falls back to the default application. WSL
  * translates every path for the Windows desktop instead of assuming a Linux
- * GUI. The text-editor intent never consults the browser.
+ * GUI. The text-editor intent never consults the browser and never follows
+ * file associations: macOS uses `open -t`, and Windows launches Notepad
+ * detached — `.yaml` ordinarily carries no association, so an `Invoke-Item`
+ * there either fails or opens the picker behind the application window.
  */
 
 import { release as osRelease } from 'node:os'
 import { extname } from 'node:path'
-import { runNativeCommand, type NativeCommandRunner } from '@deepseek-ai/dsh-native-command'
+import { runNativeCommand } from './runner.ts'
+import type { NativeCommandRunner } from './runner.ts'
 
 /** Testable command boundary; native implementations never invoke a shell. */
 export type PathOpenerRunner = NativeCommandRunner
@@ -77,7 +81,7 @@ async function openInBrowser(
   return false
 }
 
-/** Native path-open intent; macOS distinguishes text editing from file association. */
+/** Native path-open intent; the text editor bypasses file associations. */
 type PathOpenIntent = 'default' | 'text-editor'
 
 /** PowerShell single-quoted literal (doubles embedded quotes). */
@@ -97,22 +101,32 @@ function isWsl(internals: PathOpenerInternals): boolean {
   return (internals.osRelease ?? osRelease()).toLowerCase().includes('microsoft')
 }
 
-/** Open one Windows-resolvable path through its registered desktop application. */
-async function openWindowsPath(path: string, signal: AbortSignal, run: PathOpenerRunner): Promise<void> {
-  await run('powershell.exe', [
-    '-NoProfile',
-    '-Command',
-    `Invoke-Item -LiteralPath ${powershellLiteral(path)}`,
-  ], signal)
+/**
+ * Open one Windows-resolvable path. The default intent follows the registered
+ * desktop association; the text-editor intent launches Notepad detached —
+ * Windows has no `open -t` analog, and an association-following `Invoke-Item`
+ * strands unassociated extensions (the ordinary `.yaml`) on an invisible
+ * picker. `Start-Process` returns immediately, so the caller settles without
+ * holding the editor's lifetime.
+ */
+async function openWindowsPath(
+  path: string, signal: AbortSignal, run: PathOpenerRunner, intent: PathOpenIntent,
+): Promise<void> {
+  const command = intent === 'text-editor'
+    ? `Start-Process notepad.exe -ArgumentList ${powershellLiteral(path)}`
+    : `Invoke-Item -LiteralPath ${powershellLiteral(path)}`
+  await run('powershell.exe', ['-NoProfile', '-Command', command], signal)
 }
 
 /** Translate a WSL path before handing it to the Windows desktop. */
-async function openWslPath(path: string, signal: AbortSignal, run: PathOpenerRunner): Promise<void> {
+async function openWslPath(
+  path: string, signal: AbortSignal, run: PathOpenerRunner, intent: PathOpenIntent,
+): Promise<void> {
   const translated = await run('wslpath', ['-w', path], signal)
   signal.throwIfAborted()
   const windowsPath = translated.stdout.replace(/[\r\n]+$/, '')
   if (windowsPath === '') throw new Error('wslpath returned no Windows path')
-  await openWindowsPath(windowsPath, signal, run)
+  await openWindowsPath(windowsPath, signal, run, intent)
 }
 
 /** Dispatch one shell-free platform command for the requested open intent. */
@@ -136,13 +150,13 @@ async function openNativePathWithIntent(
   }
 
   if (platform === 'win32') {
-    await openWindowsPath(path, signal, run)
+    await openWindowsPath(path, signal, run, intent)
     return
   }
 
   if (platform === 'linux') {
     if (wsl) {
-      await openWslPath(path, signal, run)
+      await openWslPath(path, signal, run, intent)
       return
     }
     await run('xdg-open', [path], signal)
@@ -187,8 +201,9 @@ export function openNativePath(
 }
 
 /**
- * Open a text document for editing; macOS bypasses the file-type association
- * so a YAML association with a browser cannot consume the gesture.
+ * Open a text document for editing, bypassing the file-type association: a
+ * YAML association with a browser (or no association at all) must not consume
+ * the gesture.
  * @param path - absolute or host-resolvable text-document path.
  * @param signal - caller/connection lifetime; abort terminates the native command.
  * @param internals - Platform and runner hooks for deterministic tests.

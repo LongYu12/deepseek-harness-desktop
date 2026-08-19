@@ -26,6 +26,34 @@ export const BUILTIN_CATALOG: readonly StoreCatalogEntry[] = [
     author: 'DeepSeek AI',
     tags: ['official', 'headless'],
   },
+  {
+    name: '@linxin666/dsh-web-ui-all',
+    description: 'One-click aggregate of the whole dsh web UI family: task board, git graph, pet, remote web UI, live stats (balance view), and skin center.',
+    descriptionZh: 'DSH Web UI 全家桶聚合插件：一键安装任务看板、git 图谱、宠物、远程 Web UI、实时统计（余额查看）与皮肤中心等功能插件。',
+    author: 'linxin666',
+    tags: ['community', 'web-ui'],
+  },
+  {
+    name: 'dsh-usage-stats',
+    description: 'Lightweight usage analytics for DeepSeek Harness: token trends, activity heatmaps, model breakdowns, and exports.',
+    descriptionZh: 'DSH 用量统计：token 趋势、活跃热力图、模型用量拆分与导出。',
+    author: 'lanlandeli',
+    tags: ['community', 'usage'],
+  },
+  {
+    name: 'dshmarket',
+    description: 'Visual plugin market inside DeepSeek Harness: browse, search, and one-click install community plugins from a sidebar entry.',
+    descriptionZh: 'DSH 可视化插件市场：浏览、搜索并一键安装社区插件，提供侧边栏入口以丰富侧边栏。',
+    author: 'fkysly',
+    tags: ['community', 'marketplace'],
+  },
+  {
+    name: 'dsh-skin-market',
+    description: 'Skin marketplace: browse and apply community skins for the DeepSeek Harness web UI.',
+    descriptionZh: '皮肤市场：浏览并应用 DeepSeek Harness Web 界面的社区皮肤。',
+    author: '',
+    tags: ['community', 'skin'],
+  },
 ]
 
 /** Catalog resolution inputs. */

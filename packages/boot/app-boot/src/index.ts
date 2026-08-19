@@ -226,6 +226,42 @@ export interface UserPatchWatchOptions {
 }
 
 /**
+ * Provide key under which a booted profile surface registers its live
+ * composition refresher. The plugin store calls it after a bundle-layer
+ * mutation to reapply the full patch stack to the running tree, so an
+ * install/remove/update needs no restart when the composition applies.
+ */
+export const PROFILE_COMPOSE_KEY = 'dsh.profile-compose'
+
+/**
+ * Re-read the full patch stack through `compose` and reapply it to the root
+ * Include — the same handoff the user-layer watchers use, but driven by the
+ * caller (the plugin store after a bundle mutation) instead of a file watch.
+ * The update settles before the promise resolves: the Include reapplies its
+ * patches and the Loader diffs the tree, mounting new entries and disposing
+ * removed ones.
+ * @param ctx - settled app context containing the root Include.
+ * @param binName - diagnostic prefix.
+ * @param compose - full patch-stack composer (bundle layers included, so
+ * freshly installed bundles join the recomposition).
+ * @returns a promise resolving once the new composition is applied.
+ * @throws when the root Include is absent or the composition fails.
+ */
+export async function refreshProfileComposition(
+  ctx: Context,
+  binName: string,
+  compose: () => PatchOptions[],
+): Promise<void> {
+  const entry = bootstrapIncludes.get(ctx)
+  if (entry === undefined) throw new Error(`${binName}: live profile recomposition requires the root Include entry`)
+  // Re-read the include's non-patch options per refresh, mirroring the user
+  // patch watchers: an update must never silently revert sibling options.
+  const { patches: _previousPatches, ...includeConfig } = entry.options.config as Include.Config
+  const patches = compose()
+  await entry.update({ config: { ...includeConfig, patches } })
+}
+
+/**
  * Watch the user patch layer through Cordis HMR and transactionally reapply it to the boot include.
  * @param ctx - settled app context containing the root Include and an active HMR service.
  * @param options - diagnostic, file, and patch-composition inputs.

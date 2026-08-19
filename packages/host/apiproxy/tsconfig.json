@@ -27,6 +27,9 @@
       "path": "../../api/remotes/tsconfig.host.json"
     },
     {
+      "path": "../../host/plugin-store"
+    },
+    {
       "path": "../../util/brand"
     },
     {

@@ -25,7 +25,9 @@ import {
   loadOptionalPatches,
   loadOverlayPatches,
   loadProfile,
+  PROFILE_COMPOSE_KEY,
   PROFILE_PATCH_FILENAME,
+  refreshProfileComposition,
   watchUserPatches,
   type Profile,
 } from '@deepseek-ai/dsh-app-boot'
@@ -235,18 +237,25 @@ export async function runProfile(options: RunProfileOptions): Promise<{ ctx: Con
   // and the home layer) are re-read per generation (the HMR watcher hands us
   // only the changed file's patches, which one of the reads duplicates —
   // fresh reads keep the watchers from stitching in each other's stale copy).
+  // The bundle layers are re-read through `loadProfile` too: the plugin
+  // store's live apply mutates `dsh.profile.bundles` after boot, and a
+  // recomposition that skipped them would never see a freshly installed
+  // bundle.
   // Fresh clones per generation: the include pushes `insert` rows into the
   // mounted tree BY REFERENCE and later id-targeted patches mutate those
   // objects in place. Reusing one parsed patch object across applications
   // would bake a user override into the bundle's in-memory insert row, so
   // removing the override could never revert the row to the bundle default.
-  const composeLive = (): PatchOptions[] => structuredClone([
-    ...composed.bundlePatches,
-    ...loadOptionalPatches(NAME, composed.profile.storePatchPath) ?? [],
-    ...loadOptionalPatches(NAME, composed.profile.patchPath) ?? [],
-    ...loadOptionalPatches(NAME, homePatchPath()) ?? [],
-    ...composed.overlays,
-  ])
+  const composeLive = (): PatchOptions[] => {
+    const profile = loadProfile(NAME, options.profile, INSTALL_ANCHOR, undefined, { userLayer: false })
+    return structuredClone([
+      ...profile.layers.flatMap(layer => layer.patches),
+      ...loadOptionalPatches(NAME, profile.storePatchPath) ?? [],
+      ...loadOptionalPatches(NAME, profile.patchPath) ?? [],
+      ...loadOptionalPatches(NAME, homePatchPath()) ?? [],
+      ...composed.overlays,
+    ])
+  }
   // Cloned for the same insert-aliasing reason as composeLive: the boot
   // application must not mutate the objects later reloads recompose from.
   const ctx = await boot(NAME, rootConfig, structuredClone(allPatches(composed)), (hostCtx) => {
@@ -260,6 +269,12 @@ export async function runProfile(options: RunProfileOptions): Promise<{ ctx: Con
       args: options.args,
       exit: code => void shutdown.shutdown(code),
     })
+    // Live bundle-layer recomposition for the plugin store: a store mutation
+    // that changed `dsh.profile.bundles` calls back here to reapply the full
+    // stack (re-read per call), so installs/removes/updates can land without
+    // a restart. When no profile surface registers it, store mutations keep
+    // their restart flag.
+    hostCtx.provide(PROFILE_COMPOSE_KEY, () => refreshProfileComposition(hostCtx, NAME, composeLive))
   })
   app.current = ctx
   // A surface can dispose the whole tree while boot or this post-boot watcher

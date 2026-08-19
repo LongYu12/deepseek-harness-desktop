@@ -1,0 +1,24 @@
+.action {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.outcome,
+.error {
+  max-width: 220px;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.outcome {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.error {
+  color: var(--dsw-alias-state-error-primary);
+}

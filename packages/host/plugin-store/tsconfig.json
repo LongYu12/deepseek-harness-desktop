@@ -21,6 +21,9 @@
       "path": "../../boot/app-boot"
     },
     {
+      "path": "../../util/native-command"
+    },
+    {
       "path": "../../typert/protocol"
     },
     {

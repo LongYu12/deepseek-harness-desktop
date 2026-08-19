@@ -1,0 +1,223 @@
+[
+  {
+    "name": "@deepseek-ai/dsh-base",
+    "description": "Core bundle: agents, sessions, tools, and the base composition.",
+    "descriptionZh": "核心 bundle：agent、会话、工具与基础组合。",
+    "author": "DeepSeek AI",
+    "tags": [
+      "official",
+      "core"
+    ]
+  },
+  {
+    "name": "@deepseek-ai/dsh-web-app",
+    "description": "Web application bundle: browser UI over the local webserver.",
+    "descriptionZh": "Web 应用 bundle：本地 webserver 之上的浏览器界面。",
+    "author": "DeepSeek AI",
+    "tags": [
+      "official",
+      "web"
+    ]
+  },
+  {
+    "name": "@deepseek-ai/dsh-headless",
+    "description": "Headless bundle: terminal-only operation without a browser UI.",
+    "descriptionZh": "Headless bundle：无浏览器界面的纯终端运行。",
+    "author": "DeepSeek AI",
+    "tags": [
+      "official",
+      "headless"
+    ]
+  },
+  {
+    "name": "@deepseek-ai/dsh-acp-demo",
+    "description": "ACP automation demo: the agent-server bundle behind the ACP protocol.",
+    "descriptionZh": "ACP 自动化演示：ACP 协议背后的 agent-server bundle。",
+    "author": "DeepSeek AI",
+    "tags": [
+      "official",
+      "demo",
+      "acp"
+    ]
+  },
+  {
+    "name": "@deepseek-ai/dsh-agent-spine-demo",
+    "description": "Executor-less agent spine demo: fallback titles, provider-routed retry, optional goals.",
+    "descriptionZh": "无执行器 agent spine 演示：回退标题、按 provider 路由重试、可选目标。",
+    "author": "DeepSeek AI",
+    "tags": [
+      "official",
+      "demo",
+      "spine"
+    ]
+  },
+  {
+    "name": "dsh-plugin-graph-engine",
+    "description": "DSH 生态级基建：插件依赖图与冲突检测引擎（缺失依赖/循环依赖/工具冲突/服务冲突/管道拦截重叠）",
+    "descriptionZh": "DSH 生态级基建：插件依赖图与冲突检测引擎（缺失依赖/循环依赖/工具冲突/服务冲突/管道拦截重叠）",
+    "author": "steven95",
+    "tags": [
+      "community"
+    ]
+  },
+  {
+    "name": "deepseek-harness-desktop",
+    "description": "DeepSeek Harness Tauri 桌面版 | Only 5mb installer, zero environment setup. Windows / macOS / Linux.",
+    "descriptionZh": "DeepSeek Harness Tauri 桌面版 | Only 5mb installer, zero environment setup. Windows / macOS / Linux.",
+    "author": "hairyf",
+    "tags": [
+      "deepseek",
+      "deepseek-harness",
+      "desktop",
+      "dsh",
+      "community"
+    ]
+  },
+  {
+    "name": "cetus",
+    "description": "One macOS app for Claude Code, Codex, and every agent runtime you use — scheduled runs, global hotkey launcher, per-run git worktrees, one review board.",
+    "descriptionZh": "One macOS app for Claude Code, Codex, and every agent runtime you use — scheduled runs, global hotkey launcher, per-run git worktrees, one review board.",
+    "author": "drewnekota",
+    "tags": [
+      "ai-agent",
+      "automation",
+      "claude-code",
+      "codex",
+      "community"
+    ]
+  },
+  {
+    "name": "dsh-provenance",
+    "description": "Pre-install supply-chain preflight for DeepSeek Harness plugins — verify what you install matches the source you read",
+    "descriptionZh": "Pre-install supply-chain preflight for DeepSeek Harness plugins — verify what you install matches the source you read",
+    "author": "Darren-Tang",
+    "tags": [
+      "dsh-plugin-market",
+      "dsh-plugin-verify",
+      "dsh-plugins",
+      "community"
+    ]
+  },
+  {
+    "name": "dsh-hud",
+    "description": "HUD status panel plugin for DeepSeek Harness (dsh) web: git status, MCP servers, skills, model & token usage in a floating panel",
+    "descriptionZh": "HUD status panel plugin for DeepSeek Harness (dsh) web: git status, MCP servers, skills, model & token usage in a floating panel",
+    "author": "a903067276-rgb",
+    "tags": [
+      "deepseek-harness",
+      "community"
+    ]
+  },
+  {
+    "name": "deepseek-pet",
+    "description": "在你的deepseek-harness上养一只吃白饭的大蓝鲸",
+    "descriptionZh": "在你的deepseek-harness上养一只吃白饭的大蓝鲸",
+    "author": "keleus",
+    "tags": [
+      "deepseek-harness",
+      "deepseek-harness-plugin",
+      "community"
+    ]
+  },
+  {
+    "name": "dsh-search-boost",
+    "description": "The plunge for dsh to boost model's search ability.",
+    "descriptionZh": "The plunge for dsh to boost model's search ability.",
+    "author": "Mr-remon219",
+    "tags": [
+      "deepseek-harness",
+      "web-search",
+      "community"
+    ]
+  },
+  {
+    "name": "@kazecreator/dsh-settings-pro",
+    "description": "DeepSeek Harness settings-pro plugin: IM bridge (Telegram/WeChat), DeepSeek usage, cross-restart memory, desktop pets, and a vision bridge",
+    "descriptionZh": "DeepSeek Harness settings-pro plugin: IM bridge (Telegram/WeChat), DeepSeek usage, cross-restart memory, desktop pets, and a vision bridge",
+    "author": "kazecreator",
+    "tags": [
+      "deepseek-harness",
+      "dsh",
+      "community"
+    ]
+  },
+  {
+    "name": "@modusensus/dsh-mneme",
+    "description": "Structured memory engine for DeepSeek Harness. Offline semantic search, entity-attribute-timeline, autoDream self-consolidation, and human-editable Markdown storage.",
+    "descriptionZh": "Structured memory engine for DeepSeek Harness. Offline semantic search, entity-attribute-timeline, autoDream self-consolidation, and human-editable Markdown storage.",
+    "author": "modusensus",
+    "tags": [
+      "agent-memory",
+      "agent-memory-system",
+      "autodream",
+      "deepseek-harness",
+      "community"
+    ]
+  },
+  {
+    "name": "awesome-dsh-plugin",
+    "description": "A curated list of plugins for DeepSeek Harness (dsh) · DeepSeek Harness 插件精选列表",
+    "descriptionZh": "A curated list of plugins for DeepSeek Harness (dsh) · DeepSeek Harness 插件精选列表",
+    "author": "awesome-dsh-plugin",
+    "tags": [
+      "awesome",
+      "awesome-list",
+      "deepseek-harness",
+      "dsh",
+      "community"
+    ]
+  },
+  {
+    "name": "dsh-ivory",
+    "description": "Calm, auditable Claude-inspired theme for DeepSeek Harness — light/dark/mobile, safe Markdown preview, zero telemetry, zero runtime dependencies.",
+    "descriptionZh": "Calm, auditable Claude-inspired theme for DeepSeek Harness — light/dark/mobile, safe Markdown preview, zero telemetry, zero runtime dependencies.",
+    "author": "ZJUZhiyuCai",
+    "tags": [
+      "accessibility",
+      "claude-inspired",
+      "dark-mode",
+      "deepseek-harness",
+      "community"
+    ]
+  },
+  {
+    "name": "@linxin666/dsh-web-ui-all",
+    "description": "One-click aggregate of the whole dsh web UI family: task board, git graph, pet, remote web UI, live stats (balance view), and skin center.",
+    "descriptionZh": "DSH Web UI 全家桶聚合插件：一键安装任务看板、git 图谱、宠物、远程 Web UI、实时统计（余额查看）与皮肤中心等功能插件。",
+    "author": "linxin666",
+    "tags": [
+      "community",
+      "web-ui"
+    ]
+  },
+  {
+    "name": "dsh-usage-stats",
+    "description": "Lightweight usage analytics for DeepSeek Harness: token trends, activity heatmaps, model breakdowns, and exports.",
+    "descriptionZh": "DSH 用量统计：token 趋势、活跃热力图、模型用量拆分与导出。",
+    "author": "lanlandeli",
+    "tags": [
+      "community",
+      "usage"
+    ]
+  },
+  {
+    "name": "dshmarket",
+    "description": "Visual plugin market inside DeepSeek Harness: browse, search, and one-click install community plugins from a sidebar entry.",
+    "descriptionZh": "DSH 可视化插件市场：浏览、搜索并一键安装社区插件，提供侧边栏入口以丰富侧边栏。",
+    "author": "fkysly",
+    "tags": [
+      "community",
+      "marketplace"
+    ]
+  },
+  {
+    "name": "dsh-skin-market",
+    "description": "Skin marketplace: browse and apply community skins for the DeepSeek Harness web UI.",
+    "descriptionZh": "皮肤市场：浏览并应用 DeepSeek Harness Web 界面的社区皮肤。",
+    "author": "",
+    "tags": [
+      "community",
+      "skin"
+    ]
+  }
+]

@@ -740,6 +740,14 @@
         "@deepseek-ai/.+"
       ]
     },
+    "apps/desktop": {
+      "entry": [
+        "after-pack.cjs"
+      ],
+      "ignoreDependencies": [
+        "electron-builder"
+      ]
+    },
     "packages/client/modules": {
       "entry": [
         "tests/**/*.spec.ts"

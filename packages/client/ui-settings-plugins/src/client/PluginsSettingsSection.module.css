@@ -64,6 +64,19 @@
   color: var(--dsw-alias-label-primary);
 }
 
+/* Sticky header: title, intro, and the tab bar stay pinned to the scrolling
+   options area top while the active panel scrolls underneath; the fill matches
+   the settings panel surface so passing content hides behind it. */
+.sticky {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--dsw-alias-bg-layer-2);
+}
+
 .panel {
   min-width: 0;
   padding-top: 2px;

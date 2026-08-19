@@ -66,10 +66,6 @@
       config:
         maxNoteBytes: 8192
 
-    # Browser Session Header balance capsule, left of the Session log button.
-    - id: ui-balance-indicator
-      name: '@deepseek-ai/dsh-client-ui-balance-indicator'
-
     # Browser Session export: `/export` command plus the shared download dialog.
     - id: session-log-download
       name: '@deepseek-ai/dsh-session-log-export'

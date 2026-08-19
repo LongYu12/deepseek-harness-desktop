@@ -1,13 +1,21 @@
-/** Plugin store tab registered into Web Settings. */
+/** Plugin store tab and header hot-reload action registered into Web Settings. */
 
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { StoreMutationProgress } from '@deepseek-ai/dsh-api-remotes/client'
+import { HotReloadAction, type HotReloadActionInjected } from './HotReloadAction.tsx'
+import { PluginImportTab, type PluginImportTabInjected } from './PluginImportTab.tsx'
 import { PluginStoreSettingsTab, type PluginStoreSettingsTabInjected } from './PluginStoreSettingsTab.tsx'
 import { en, zh, type PluginStoreLocaleKey } from './locales.ts'
 
+export type { HotReloadActionInjected, HotReloadActionProps } from './HotReloadAction.tsx'
+export type { PluginImportTabInjected, PluginImportTabProps } from './PluginImportTab.tsx'
 export type { PluginStoreSettingsTabInjected, PluginStoreSettingsTabProps } from './PluginStoreSettingsTab.tsx'
 export type { PluginStoreLocaleKey } from './locales.ts'
+
+/** Subscribe to live store mutation progress; returns the disposer. */
+export type SubscribeStoreProgress = (listener: (progress: StoreMutationProgress) => void) => () => void
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
@@ -60,8 +68,48 @@ export function apply(ctx: ClientContext): void {
     if (!result.ok) throw failure('setEntryEnabled', result.error)
     return result.value
   }
+  const openStoreConfig: PluginStoreSettingsTabInjected['openStoreConfig'] = async () => {
+    const result = await ctx.remote.pluginStore.openStoreConfig()
+    if (!result.ok) throw failure('openStoreConfig', result.error)
+    return result.value
+  }
+  const subscribeProgress: SubscribeStoreProgress = listener =>
+    ctx.remote.$on('plugin-store/progress', listener)
+  // Local inventory-changed bus: the import tab runs in a sibling panel of
+  // the store tab, and a successful import mutates the same profile manifest
+  // the store tab's inventory reads, so the import notifies the store tab to
+  // re-read it.
+  const inventoryListeners = new Set<() => void>()
+  const notifyInventoryChanged = (): void => {
+    for (const listener of [...inventoryListeners]) listener()
+  }
+  const subscribeInventoryChanged = (listener: () => void): () => void => {
+    inventoryListeners.add(listener)
+    return () => { inventoryListeners.delete(listener) }
+  }
   const injected = (): PluginStoreSettingsTabInjected =>
-    ({ catalog, inventory, install, remove, update, setEntryEnabled })
+    ({ catalog, inventory, install, remove, update, setEntryEnabled, openStoreConfig, subscribeProgress, subscribeInventoryChanged })
+
+  const importBundle: PluginImportTabInjected['importBundle'] = async (input) => {
+    const result = await ctx.remote.pluginStore.importBundle(input)
+    if (!result.ok) throw failure('importBundle', result.error)
+    return result.value
+  }
+  const importInjected = (): PluginImportTabInjected => ({ importBundle, subscribeProgress, notifyInventoryChanged })
+
+  const hotReload: HotReloadActionInjected['hotReload'] = async () => {
+    const result = await ctx.remote.pluginStore.hotReload()
+    if (!result.ok) throw failure('hotReload', result.error)
+    return result.value
+  }
+
+  ctx.slots.inject('settings.action', () => ctx.slots.register({
+    name: 'settings.action',
+    id: 'plugin-store-hot-reload',
+    order: 10,
+    locale: NS,
+    inject: () => ({ hotReload }),
+  }, HotReloadAction))
 
   ctx.slots.inject('settings.plugins.tab', () => ctx.slots.register({
     name: 'settings.plugins.tab',
@@ -71,4 +119,13 @@ export function apply(ctx: ClientContext): void {
     locale: NS,
     inject: injected,
   }, PluginStoreSettingsTab))
+
+  ctx.slots.inject('settings.plugins.tab', () => ctx.slots.register({
+    name: 'settings.plugins.tab',
+    id: 'import',
+    order: 30,
+    label: () => t('importTab'),
+    locale: NS,
+    inject: importInjected,
+  }, PluginImportTab))
 }

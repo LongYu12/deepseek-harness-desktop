@@ -13,7 +13,7 @@ export type { TypertClientRemote as ClientRemote } from '@deepseek-ai/dsh-typert
 export type { PluginInventorySnapshot } from '@deepseek-ai/dsh-host-plugin-inventory/types'
 export type {
   PluginStoreInventory, StoreCatalog, StoreCatalogEntry, StoreCatalogSource,
-  StoreInventoryBundle, StoreInventoryEntry, StoreMutationResult,
+  StoreInventoryBundle, StoreInventoryEntry, StoreMutationProgress, StoreMutationResult,
 } from '@deepseek-ai/dsh-host-plugin-store/types'
 export type {} from '@deepseek-ai/dsh-commands/remote'
 export type {} from '@deepseek-ai/dsh-goal/remote'
@@ -29,6 +29,7 @@ export type { ApiRemoteForwardedEvent } from '../types.ts'
 export type {} from '@deepseek-ai/dsh-commands/types'
 export type {} from '@deepseek-ai/dsh-cordis-host-runner/types'
 export type {} from '@deepseek-ai/dsh-credentials/types'
+export type {} from '@deepseek-ai/dsh-host-plugin-store/types'
 export type {} from '@deepseek-ai/dsh-llm/types'
 export type {} from '@deepseek-ai/dsh-agent-presets/types'
 export type {} from '@deepseek-ai/dsh-settings/types'

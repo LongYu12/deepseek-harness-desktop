@@ -11,7 +11,8 @@ import { PROFILE_STORE_PATCH_FILENAME } from '@deepseek-ai/dsh-app-boot'
 import { remoteMethods } from '@deepseek-ai/dsh-typert-protocol'
 import { BUILTIN_CATALOG, loadStoreCatalog } from '../src/catalog.ts'
 import PluginStoreGateway from '../src/index.ts'
-import { assertRegistryPackageName, spawnPnpm } from '../src/pnpm.ts'
+import { assertRegistryPackageName, parsePluginImportCommand, resolveImportSpec, spawnPnpm, spawnPnpmStreaming } from '../src/pnpm.ts'
+import type { StoreMutationProgress } from '../src/types.ts'
 
 const contexts: Context[] = []
 const tempDirs: string[] = []
@@ -68,7 +69,7 @@ function fetchFake(body: unknown, status = 200): typeof fetch {
 }
 
 describe('PluginStoreGateway remote surface', () => {
-  it('publishes six direct methods under the pluginStore namespace', async () => {
+  it('publishes nine direct methods under the pluginStore namespace', async () => {
     const { store } = await harness()
     expect(store.typertRemote).toMatchObject({
       serviceKey: 'pluginStore',
@@ -78,9 +79,12 @@ describe('PluginStoreGateway remote surface', () => {
       { method: 'catalog', invocation: { kind: 'direct' } },
       { method: 'inventory', invocation: { kind: 'direct' } },
       { method: 'installBundle', invocation: { kind: 'direct' } },
+      { method: 'importBundle', invocation: { kind: 'direct' } },
       { method: 'removeBundle', invocation: { kind: 'direct' } },
       { method: 'updateBundle', invocation: { kind: 'direct' } },
       { method: 'setEntryEnabled', invocation: { kind: 'direct' } },
+      { method: 'hotReload', invocation: { kind: 'direct' } },
+      { method: 'openStoreConfig', invocation: { kind: 'direct' } },
     ])
   })
 })
@@ -198,9 +202,9 @@ describe('inventory', () => {
       { packageName: 'fake-bundle', version: '1.2.3', restartNeeded: false },
     ])
     expect(snapshot.entries).toEqual([
-      // The layer file marks the entry; the Loader's own state is untouched
-      // until boot/HMR applies the layer, so `enabled` still reflects it.
-      { entryId, moduleName: 'cordis:active', enabled: true, storeDisabled: true },
+      // The layer file's mark projects onto the Loader state immediately: the
+      // entry reads disabled before boot/HMR applies the layer.
+      { entryId, moduleName: 'cordis:active', enabled: false, storeDisabled: true },
     ])
     expect(groupId).not.toBe(entryId)
   })
@@ -272,6 +276,177 @@ describe('pnpm mutations', () => {
     }
   })
 
+  it('rejects malformed import commands and targets before running pnpm', async () => {
+    const dir = createProfileDir()
+    const { store } = await harness(dir)
+    store.runner = () => { throw new Error('runner must not run') }
+    for (const command of [
+      'dsh plugin remove x',
+      'dsh plugin',
+      'dsh plugin --profile',
+      'dsh plugin --profile -x add pkg',
+      'dsh plugin --profile web add',
+      'dsh plugin --profile web add x extra',
+      'dsh foo add x',
+    ]) {
+      await expect(store.importBundle(command)).rejects.toThrow('is not a plugin import command')
+    }
+    for (const spec of [
+      'http://example.com/repo.git',
+      'file:///tmp/repo',
+      'git+https://x/y.git; rm -rf /',
+      'git+https://x/y.git --ignore-scripts',
+      'owner repo',
+      'https://example.com/archive.tgz',
+      '',
+    ]) {
+      await expect(store.importBundle(spec)).rejects.toThrow('is not an importable plugin target')
+    }
+  })
+
+  it('imports a bundle from a git spec and reconciles the layer list', async () => {
+    const dir = createProfileDir()
+    mkdirSync(join(dir, 'node_modules', 'git-bundle'), { recursive: true })
+    writeFileSync(join(dir, 'node_modules', 'git-bundle', 'package.json'), JSON.stringify({
+      name: 'git-bundle',
+      version: '0.1.0',
+      dsh: { bundle: { patch: 'cordis.patch.yml' } },
+    }))
+    const { store } = await harness(dir)
+    const calls: { args: readonly string[]; cwd: string }[] = []
+    store.runner = (args, cwd) => {
+      calls.push({ args, cwd })
+      const manifest = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')) as { dependencies: Record<string, string> }
+      manifest.dependencies['git-bundle'] = 'github:owner/repo#main'
+      writeFileSync(join(dir, 'package.json'), JSON.stringify(manifest))
+      return { exitCode: 0, stderr: '' }
+    }
+    // Leading and trailing whitespace is trimmed before pnpm runs.
+    const result = await store.importBundle('  github:owner/repo#main  ')
+    expect(calls).toEqual([{ args: ['add', 'github:owner/repo#main'], cwd: dir }])
+    expect(result).toEqual({ ok: true, restartNeeded: true, message: 'pnpm add github:owner/repo#main succeeded' })
+    const manifest = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')) as { dsh: { profile: { bundles: string[] } } }
+    expect(manifest.dsh.profile.bundles).toEqual(['fake-bundle', 'git-bundle'])
+  })
+
+  it('imports a registry plugin from a pasted command and streams progress', async () => {
+    const dir = createProfileDir()
+    mkdirSync(join(dir, 'node_modules', 'dshmarket'), { recursive: true })
+    writeFileSync(join(dir, 'node_modules', 'dshmarket', 'package.json'), JSON.stringify({
+      name: 'dshmarket',
+      version: '1.14.1',
+      dsh: { bundle: { patch: 'cordis.patch.yml' } },
+    }))
+    const { ctx, store } = await harness(dir)
+    const progress: StoreMutationProgress[] = []
+    ctx.on('plugin-store/progress', entry => progress.push(entry))
+    const calls: { args: readonly string[]; cwd: string }[] = []
+    store.runner = (args, cwd, onProgress) => {
+      calls.push({ args, cwd })
+      onProgress?.('Progress: resolved 42 packages')
+      onProgress?.('Progress: done')
+      const manifest = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')) as { dependencies: Record<string, string> }
+      manifest.dependencies['dshmarket'] = '^1.14.1'
+      writeFileSync(join(dir, 'package.json'), JSON.stringify(manifest))
+      return { exitCode: 0, stderr: 'Progress: done' }
+    }
+    const result = await store.importBundle('dsh plugin --profile web add dshmarket')
+    expect(calls).toEqual([{ args: ['add', 'dshmarket'], cwd: dir }])
+    expect(result).toEqual({ ok: true, restartNeeded: true, message: 'pnpm add dshmarket succeeded' })
+    expect(progress).toEqual([
+      { operation: 'add', target: 'dshmarket', line: 'Progress: resolved 42 packages' },
+      { operation: 'add', target: 'dshmarket', line: 'Progress: done' },
+    ])
+    const manifest = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')) as { dsh: { profile: { bundles: string[] } } }
+    expect(manifest.dsh.profile.bundles).toEqual(['fake-bundle', 'dshmarket'])
+  })
+
+  it('imports a scoped registry plugin from a bare spec', async () => {
+    const dir = createProfileDir()
+    mkdirSync(join(dir, 'node_modules', '@linxin666', 'dsh-web-ui-all'), { recursive: true })
+    writeFileSync(join(dir, 'node_modules', '@linxin666', 'dsh-web-ui-all', 'package.json'), JSON.stringify({
+      name: '@linxin666/dsh-web-ui-all',
+      version: '0.2.1',
+      dsh: { bundle: { patch: 'cordis.patch.yml' } },
+    }))
+    const { store } = await harness(dir)
+    store.runner = (args) => {
+      expect(args).toEqual(['add', '@linxin666/dsh-web-ui-all'])
+      const manifest = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')) as { dependencies: Record<string, string> }
+      manifest.dependencies['@linxin666/dsh-web-ui-all'] = '^0.2.1'
+      writeFileSync(join(dir, 'package.json'), JSON.stringify(manifest))
+      return { exitCode: 0, stderr: '' }
+    }
+    const result = await store.importBundle('@linxin666/dsh-web-ui-all')
+    expect(result).toEqual({ ok: true, restartNeeded: true, message: 'pnpm add @linxin666/dsh-web-ui-all succeeded' })
+  })
+
+  it('imports a tarball URL and flags the bundle join', async () => {
+    const dir = createProfileDir()
+    const tarball = 'https://github.com/omdsh-dev/dsh-at-file/archive/refs/tags/v0.6.3.tar.gz'
+    mkdirSync(join(dir, 'node_modules', 'dsh-at-file'), { recursive: true })
+    writeFileSync(join(dir, 'node_modules', 'dsh-at-file', 'package.json'), JSON.stringify({
+      name: 'dsh-at-file',
+      version: '0.6.3',
+      dsh: { bundle: { patch: 'cordis.patch.yml' } },
+    }))
+    const { store } = await harness(dir)
+    const calls: { args: readonly string[]; cwd: string }[] = []
+    store.runner = (args, cwd) => {
+      calls.push({ args, cwd })
+      const manifest = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')) as { dependencies: Record<string, string> }
+      manifest.dependencies['dsh-at-file'] = tarball
+      writeFileSync(join(dir, 'package.json'), JSON.stringify(manifest))
+      return { exitCode: 0, stderr: '' }
+    }
+    const result = await store.importBundle(`dsh plugin --profile web add ${tarball}`)
+    expect(calls).toEqual([{ args: ['add', tarball], cwd: dir }])
+    expect(result).toEqual({ ok: true, restartNeeded: true, message: `pnpm add ${tarball} succeeded` })
+    const manifest = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')) as { dsh: { profile: { bundles: string[] } } }
+    expect(manifest.dsh.profile.bundles).toEqual(['fake-bundle', 'dsh-at-file'])
+  })
+
+  it('rejects an import command targeting another profile', async () => {
+    const dir = createProfileDir()
+    const { store } = await harness(dir)
+    store.runner = () => { throw new Error('runner must not run') }
+    await expect(store.importBundle('dsh plugin --profile other add dshmarket')).rejects.toThrow(
+      'targets profile "other" but the running profile is "web"',
+    )
+  })
+
+  it('contains a throwing progress observer without aborting the mutation', async () => {
+    const dir = createProfileDir()
+    const { ctx, store } = await harness(dir)
+    ctx.on('plugin-store/progress', () => { throw new Error('observer exploded') })
+    store.runner = (_args, _cwd, onProgress) => {
+      onProgress?.('line-one')
+      const manifest = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')) as { dependencies: Record<string, string> }
+      manifest.dependencies['plain-lib'] = '^1.0.0'
+      writeFileSync(join(dir, 'package.json'), JSON.stringify(manifest))
+      return { exitCode: 0, stderr: '' }
+    }
+    const result = await store.installBundle('plain-lib')
+    expect(result.ok).toBe(true)
+  })
+
+  it('imports a plain dependency without a layer change or restart flag', async () => {
+    const dir = createProfileDir()
+    mkdirSync(join(dir, 'node_modules', 'plain-lib'), { recursive: true })
+    writeFileSync(join(dir, 'node_modules', 'plain-lib', 'package.json'), JSON.stringify({ name: 'plain-lib', version: '1.0.0' }))
+    const { store } = await harness(dir)
+    store.runner = () => {
+      const manifest = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')) as { dependencies: Record<string, string> }
+      manifest.dependencies['plain-lib'] = 'git+https://example.com/plain-lib.git'
+      writeFileSync(join(dir, 'package.json'), JSON.stringify(manifest))
+      return { exitCode: 0, stderr: '' }
+    }
+    const result = await store.importBundle('git+https://example.com/plain-lib.git')
+    expect(result.ok).toBe(true)
+    expect(result.restartNeeded).toBe(false)
+    expect(result.message).toContain('plain-lib declares no dsh.bundle')
+  })
+
   it('installs a new bundle and reconciles the layer list', async () => {
     const dir = createProfileDir()
     mkdirSync(join(dir, 'node_modules', 'new-bundle'), { recursive: true })
@@ -294,6 +469,52 @@ describe('pnpm mutations', () => {
     expect(result).toEqual({ ok: true, restartNeeded: true, message: 'pnpm add new-bundle succeeded' })
     const manifest = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')) as { dsh: { profile: { bundles: string[] } } }
     expect(manifest.dsh.profile.bundles).toEqual(['fake-bundle', 'new-bundle'])
+  })
+
+  it('applies a bundle mutation live through the composer and drops the restart flag', async () => {
+    const dir = createProfileDir()
+    const { store } = await harness(dir)
+    const compose = vi.fn(async () => {})
+    store.composer = compose
+    store.runner = (args) => {
+      expect(args).toEqual(['remove', 'fake-bundle'])
+      const manifest = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')) as { dependencies: Record<string, string> }
+      delete manifest.dependencies['fake-bundle']
+      writeFileSync(join(dir, 'package.json'), JSON.stringify(manifest))
+      return { exitCode: 0, stderr: '' }
+    }
+    const result = await store.removeBundle('fake-bundle')
+    expect(result).toEqual({
+      ok: true,
+      restartNeeded: false,
+      message: 'pnpm remove fake-bundle succeeded (applied live; no restart needed)',
+    })
+    expect(compose).toHaveBeenCalledTimes(1)
+    // The boot snapshot follows the live apply, so a fresh inventory no
+    // longer marks the mutation for a restart.
+    expect(store.inventory().restartNeeded).toBe(false)
+  })
+
+  it('keeps the restart flag and names the failure when the live apply rejects', async () => {
+    const dir = createProfileDir()
+    mkdirSync(join(dir, 'node_modules', 'new-bundle'), { recursive: true })
+    writeFileSync(join(dir, 'node_modules', 'new-bundle', 'package.json'), JSON.stringify({
+      name: 'new-bundle',
+      version: '2.0.0',
+      dsh: { bundle: { patch: 'cordis.patch.yml' } },
+    }))
+    const { store } = await harness(dir)
+    store.composer = async () => { throw new Error('patch exploded') }
+    store.runner = () => {
+      const manifest = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')) as { dependencies: Record<string, string> }
+      manifest.dependencies['new-bundle'] = '^2.0.0'
+      writeFileSync(join(dir, 'package.json'), JSON.stringify(manifest))
+      return { exitCode: 0, stderr: '' }
+    }
+    const result = await store.installBundle('new-bundle')
+    expect(result.ok).toBe(true)
+    expect(result.restartNeeded).toBe(true)
+    expect(result.message).toContain('live apply failed: patch exploded; a restart applies it')
   })
 
   it('installs a plain dependency without a layer change and names it', async () => {
@@ -361,9 +582,44 @@ describe('pnpm mutations', () => {
   it('requires a profile boot for every mutation', async () => {
     const { store } = await harness()
     await expect(store.installBundle('left-pad')).rejects.toThrow('no profile directory')
+    await expect(store.importBundle('left-pad')).rejects.toThrow('no profile directory')
     await expect(store.removeBundle('left-pad')).rejects.toThrow('no profile directory')
     await expect(store.updateBundle('left-pad')).rejects.toThrow('no profile directory')
     await expect(store.setEntryEnabled('anything', false)).rejects.toThrow('no profile directory')
+    await expect(store.openStoreConfig()).rejects.toThrow('no profile directory')
+  })
+})
+
+describe('hotReload', () => {
+  it('reports a missing composer as restart-required', async () => {
+    const { store } = await harness()
+    await expect(store.hotReload()).resolves.toEqual({
+      ok: false,
+      restartNeeded: true,
+      message: 'plugin-store: no live composer on this host — restart the process to apply changes',
+    })
+  })
+
+  it('reapplies the patch stack live through the composer', async () => {
+    const { store } = await harness()
+    const compose = vi.fn(async () => {})
+    store.composer = compose
+    await expect(store.hotReload()).resolves.toEqual({
+      ok: true,
+      restartNeeded: false,
+      message: 'plugin-store: patch stack reapplied live — no restart needed',
+    })
+    expect(compose).toHaveBeenCalledTimes(1)
+  })
+
+  it('flags a failed live apply as restart-required', async () => {
+    const { store } = await harness()
+    store.composer = async () => { throw new Error('patch exploded') }
+    await expect(store.hotReload()).resolves.toEqual({
+      ok: false,
+      restartNeeded: true,
+      message: 'plugin-store: live apply failed — patch exploded; restart the process to apply changes',
+    })
   })
 })
 
@@ -426,6 +682,42 @@ describe('setEntryEnabled', () => {
   })
 })
 
+describe('openStoreConfig', () => {
+  it('seeds an absent user patch layer and opens it', async () => {
+    const dir = createProfileDir()
+    const { store } = await harness(dir)
+    const opened: string[] = []
+    store.openTextFile = async (path) => { opened.push(path) }
+    const path = join(dir, 'cordis.patch.yml')
+    const result = await store.openStoreConfig()
+    expect(result.ok).toBe(true)
+    expect(result.restartNeeded).toBe(false)
+    expect(result.message).toContain(path)
+    expect(opened).toEqual([path])
+    // The seed parses as an empty row list.
+    expect(readFileSync(path, 'utf8')).toContain('[]')
+  })
+
+  it('opens an existing user patch layer without rewriting it', async () => {
+    const dir = createProfileDir()
+    const { store } = await harness(dir)
+    const path = join(dir, 'cordis.patch.yml')
+    writeFileSync(path, '# my own rows\n- id: keep-me\n')
+    store.openTextFile = async () => {}
+    expect((await store.openStoreConfig()).ok).toBe(true)
+    expect(readFileSync(path, 'utf8')).toBe('# my own rows\n- id: keep-me\n')
+  })
+
+  it('reports an opener failure without throwing', async () => {
+    const dir = createProfileDir()
+    const { store } = await harness(dir)
+    store.openTextFile = async () => { throw new Error('no editor available') }
+    const result = await store.openStoreConfig()
+    expect(result.ok).toBe(false)
+    expect(result.message).toContain('no editor available')
+  })
+})
+
 describe('catalog resolution details', () => {
   it('uses the ambient fetch when no implementation is injected', async () => {
     vi.stubGlobal('fetch', fetchFake([{ name: 'ambient-entry', description: 'Ambient.' }]))
@@ -443,6 +735,60 @@ describe('catalog resolution details', () => {
     await ctx.plugin(Loader)
     const store = new PluginStoreGateway(ctx)
     await expect(store.catalog()).resolves.toMatchObject({ source: 'builtin' })
+  })
+})
+
+describe('parsePluginImportCommand', () => {
+  it('parses full, profile-less, and bare forms', () => {
+    expect(parsePluginImportCommand('dsh plugin --profile web add dshmarket')).toEqual({ profile: 'web', spec: 'dshmarket' })
+    expect(parsePluginImportCommand('dsh plugin add dshmarket')).toEqual({ profile: undefined, spec: 'dshmarket' })
+    expect(parsePluginImportCommand('  dshmarket  ')).toEqual({ profile: undefined, spec: 'dshmarket' })
+    expect(parsePluginImportCommand('dsh plugin --profile web add https://github.com/omdsh-dev/dsh-at-file/archive/refs/tags/v0.6.3.tar.gz'))
+      .toEqual({ profile: 'web', spec: 'https://github.com/omdsh-dev/dsh-at-file/archive/refs/tags/v0.6.3.tar.gz' })
+  })
+
+  it('rejects dsh commands that are not imports', () => {
+    for (const input of [
+      'dsh plugin remove x',
+      'dsh plugin',
+      'dsh plugin --profile',
+      'dsh plugin --profile -x add pkg',
+      'dsh plugin --profile web add',
+      'dsh plugin --profile web add x extra',
+      'dsh foo add x',
+    ]) {
+      expect(() => parsePluginImportCommand(input)).toThrow('is not a plugin import command')
+    }
+  })
+})
+
+describe('resolveImportSpec', () => {
+  it('classifies registry, git, and tarball targets in priority order', () => {
+    expect(resolveImportSpec('dshmarket')).toEqual({ kind: 'registry', spec: 'dshmarket' })
+    expect(resolveImportSpec('@linxin666/dsh-web-ui-all')).toEqual({ kind: 'registry', spec: '@linxin666/dsh-web-ui-all' })
+    // Bare owner/repo matches the registry grammar too; the git shorthand wins.
+    expect(resolveImportSpec('omdsh-dev/dsh-at-file')).toEqual({ kind: 'git', spec: 'omdsh-dev/dsh-at-file' })
+    expect(resolveImportSpec('github:owner/repo#main')).toEqual({ kind: 'git', spec: 'github:owner/repo#main' })
+    expect(resolveImportSpec('git+https://example.com/x.git')).toEqual({ kind: 'git', spec: 'git+https://example.com/x.git' })
+    expect(resolveImportSpec('https://github.com/omdsh-dev/dsh-at-file.git')).toEqual({ kind: 'git', spec: 'https://github.com/omdsh-dev/dsh-at-file.git' })
+    expect(resolveImportSpec('https://github.com/omdsh-dev/dsh-at-file/archive/refs/tags/v0.6.3.tar.gz'))
+      .toEqual({ kind: 'tarball', spec: 'https://github.com/omdsh-dev/dsh-at-file/archive/refs/tags/v0.6.3.tar.gz' })
+  })
+
+  it('rejects every unaccepted target shape', () => {
+    for (const spec of [
+      'http://example.com/repo.git',
+      'file:///tmp/repo',
+      './local',
+      'git+https://x/y.git; rm -rf /',
+      'git+https://x/y.git --ignore-scripts',
+      'owner repo',
+      'https://example.com/archive.tgz',
+      'UPPER',
+      '',
+    ]) {
+      expect(() => resolveImportSpec(spec)).toThrow('is not an importable plugin target')
+    }
   })
 })
 
@@ -468,6 +814,28 @@ describe('spawnPnpm default runner', () => {
     return dir
   }
 
+  it('passes --ignore-scripts only to installing commands', () => {
+    // The shim records its arguments next to itself; cmd accepts forward-slash redirect paths.
+    const dir = fakePnpmDir(process.platform === 'win32'
+      ? '@echo off\necho %* > %~dp0args.txt'
+      : '#!/bin/sh\necho "$*" > "$(dirname "$0")/args.txt"')
+    const argsLog = join(dir, 'args.txt')
+    const oldPath = process.env.PATH
+    process.env.PATH = dir
+    try {
+      spawnPnpm(['add', 'pkg'], dir)
+      expect(readFileSync(argsLog, 'utf8')).toContain('--ignore-scripts')
+      spawnPnpm(['remove', 'pkg'], dir)
+      expect(readFileSync(argsLog, 'utf8')).not.toContain('--ignore-scripts')
+      spawnPnpm(['update', 'pkg'], dir)
+      expect(readFileSync(argsLog, 'utf8')).not.toContain('--ignore-scripts')
+      spawnPnpm(['--version'], dir)
+      expect(readFileSync(argsLog, 'utf8')).not.toContain('--ignore-scripts')
+    } finally {
+      process.env.PATH = oldPath
+    }
+  })
+
   it('reports the exit code and stderr of a real spawn', () => {
     const dir = fakePnpmDir(process.platform === 'win32'
       ? '@echo off\necho fake-stderr-line 1>&2\nexit /b 7'
@@ -491,5 +859,25 @@ describe('spawnPnpm default runner', () => {
       exitCode: 127,
       stderr: 'pnpm not found on PATH',
     })
+  })
+
+  it('streams stderr lines to the progress listener as they arrive', async () => {
+    const dir = fakePnpmDir(process.platform === 'win32'
+      ? '@echo off\necho line-one 1>&2\necho line-two 1>&2\nexit /b 7'
+      : '#!/bin/sh\necho line-one >&2\necho line-two >&2\nexit 7')
+    const lines: string[] = []
+    const oldPath = process.env.PATH
+    process.env.PATH = dir
+    try {
+      const result = await spawnPnpmStreaming(['add', 'pkg'], dir, line => lines.push(line))
+      expect(lines).toEqual(['line-one', 'line-two'])
+      expect(result.exitCode).toBe(7)
+      // The raw aggregate carries platform line endings; the progress lines
+      // above are the normalized per-line surface.
+      expect(result.stderr).toContain('line-one')
+      expect(result.stderr).toContain('line-two')
+    } finally {
+      process.env.PATH = oldPath
+    }
   })
 })

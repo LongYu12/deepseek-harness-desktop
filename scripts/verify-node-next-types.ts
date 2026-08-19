@@ -12,6 +12,10 @@ import { dirname, resolve } from 'node:path'
 
 const root = resolve(import.meta.dirname, '..')
 
+// Windows directory symlinks need elevated privileges; junctions cover the
+// same absolute-directory targets without them.
+const dirLinkType = process.platform === 'win32' ? 'junction' : 'dir'
+
 interface ExportTarget {
   types?: string
 }
@@ -84,7 +88,7 @@ function linkPackage(pkg: WorkspacePackage, nodeModules: string): void {
   const parts = pkg.name.split('/')
   const link = resolve(nodeModules, ...parts)
   mkdirSync(dirname(link), { recursive: true })
-  symlinkSync(pkg.dir, link, 'dir')
+  symlinkSync(pkg.dir, link, dirLinkType)
 }
 
 const packages = workspacePackages()
@@ -117,7 +121,7 @@ try {
   if (existsSync(rootTypes)) {
     const typesDir = resolve(nodeModules, '@types')
     mkdirSync(typesDir, { recursive: true })
-    symlinkSync(rootTypes, resolve(typesDir, 'node'), 'dir')
+    symlinkSync(rootTypes, resolve(typesDir, 'node'), dirLinkType)
   }
 
   writeFileSync(resolve(tmp, 'package.json'), `${JSON.stringify({ type: 'module', private: true }, null, 2)}\n`)

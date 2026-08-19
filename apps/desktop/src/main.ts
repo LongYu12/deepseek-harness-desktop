@@ -95,15 +95,7 @@ class Backend {
 
   /** Kill the backend process tree; idempotent. */
   stop(): void {
-    const child = this.child
-    if (child === undefined || child.exitCode !== null || child.signalCode !== null) return
-    if (process.platform === 'win32') {
-      // Windows kill is tree-scoped: the backend's own children (PTY shells,
-      // workers) must not survive their parent.
-      spawn('taskkill', ['/pid', String(child.pid), '/t', '/f'], { stdio: 'ignore', windowsHide: true })
-      return
-    }
-    child.kill('SIGTERM')
+    killChildTree(this.child)
   }
 
   private observeStdout(text: string): void {
@@ -122,7 +114,66 @@ class Backend {
   }
 }
 
+/**
+ * The local plugin-store index server: the zero-dependency Node HTTP server
+ * over the bundled `local-plugin-store/index.json`, auto-spawned with the app
+ * so a configured `indexUrl` needs no manual launcher. A port already in use
+ * means another instance owns the store; that child exits 0 by itself.
+ */
+class LocalStoreServer {
+  /** The child once spawned; undefined before {@link start}. */
+  child: ChildProcess | undefined
+
+  /** Spawn the bundled store server unless this plane ships no store. */
+  start(): void {
+    const bin = localStoreBin()
+    if (bin === undefined) return
+    const child = spawn(process.execPath, [bin], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+    })
+    this.child = child
+    // Diagnostics only: the store is a convenience, never a startup gate.
+    child.stderr.on('data', (chunk: Buffer) => {
+      console.error(`dsh-desktop local-store: ${chunk.toString('utf8').trimEnd()}`)
+    })
+  }
+
+  /** Kill the spawned server; idempotent, and never touches another instance. */
+  stop(): void {
+    killChildTree(this.child)
+  }
+}
+
+/**
+ * Kill one spawned child process tree; idempotent, and never touches another
+ * instance. Windows kills are tree-scoped so a child's own children (PTY
+ * shells, workers) do not survive their parent.
+ */
+function killChildTree(child: ChildProcess | undefined): void {
+  if (child === undefined || child.exitCode !== null || child.signalCode !== null) return
+  if (process.platform === 'win32') {
+    spawn('taskkill', ['/pid', String(child.pid), '/t', '/f'], { stdio: 'ignore', windowsHide: true })
+    return
+  }
+  child.kill('SIGTERM')
+}
+
+/**
+ * The bundled local-plugin-store entry for this plane: packaged builds carry
+ * the directory under app resources; dev runs use the repository copy.
+ * @returns the serve.mjs path, or undefined when this plane ships no store.
+ */
+function localStoreBin(): string | undefined {
+  const dir = app.isPackaged
+    ? join(process.resourcesPath, 'local-plugin-store')
+    : join(here, '..', '..', '..', 'local-plugin-store')
+  const bin = join(dir, 'serve.mjs')
+  return existsSync(bin) ? bin : undefined
+}
+
 const backend = new Backend()
+const storeServer = new LocalStoreServer()
 let mainWindow: BrowserWindow | undefined
 
 /** Open the main window on the served backend URL. */
@@ -176,6 +227,7 @@ if (!app.requestSingleInstanceLock()) {
       return
     }
     backend.start(bin)
+    storeServer.start()
     const timeout = setTimeout(() => {
       void backend.ready.catch(() => {})
       reportStartupFailure(new Error(`backend did not become ready within ${String(BACKEND_READY_TIMEOUT_MS / 1000)}s`))
@@ -192,5 +244,8 @@ if (!app.requestSingleInstanceLock()) {
   // The backend IS the app on every platform: closing the window quits, and
   // quit owns the backend teardown.
   app.on('window-all-closed', () => { app.quit() })
-  app.on('quit', () => { backend.stop() })
+  app.on('quit', () => {
+    backend.stop()
+    storeServer.stop()
+  })
 }

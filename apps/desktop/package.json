@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-desktop",
   "description": "dsh desktop shell: an Electron window around the dsh web backend, distributed as a self-contained installer",
-  "version": "1.0.2",
+  "version": "1.0.8",
   "private": true,
   "repository": {
     "type": "git",

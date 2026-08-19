@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type {
   PluginStoreInventory,
   StoreCatalog,
   StoreCatalogEntry,
+  StoreMutationProgress,
   StoreMutationResult,
 } from '@deepseek-ai/dsh-api-remotes/client'
 import { IconSearchOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -23,6 +24,12 @@ export interface PluginStoreSettingsTabInjected {
   update: (packageName: string) => Promise<StoreMutationResult>
   /** Enable or disable a loaded entry through the store patch layer. */
   setEntryEnabled: (entryId: string, enabled: boolean) => Promise<StoreMutationResult>
+  /** Materialize the profile user patch layer and open it in a text editor. */
+  openStoreConfig: () => Promise<StoreMutationResult>
+  /** Subscribe to live store mutation progress; returns the disposer. */
+  subscribeProgress: (listener: (progress: StoreMutationProgress) => void) => () => void
+  /** Subscribe to a store inventory refresh request; returns the disposer. */
+  subscribeInventoryChanged: (listener: () => void) => () => void
 }
 
 /** Full component props assembled by the Settings slot renderer. */
@@ -44,6 +51,9 @@ type InventoryState =
 /** In-flight bundle mutation keyed by package name. */
 type BundleMutation = 'install' | 'remove' | 'update'
 
+/** Delay before the post-toggle settle refresh reads the recomposed Loader state. */
+const ENTRY_SETTLE_REFRESH_MS = 800
+
 interface Notice {
   readonly kind: 'success' | 'error'
   readonly text: string
@@ -58,7 +68,10 @@ function matches(entry: StoreCatalogEntry, normalizedQuery: string): boolean {
 
 /** Render the plugin store: catalog browsing plus installed bundle and entry management. */
 export function PluginStoreSettingsTab(injected: PluginStoreSettingsTabProps): ReactNode {
-  const { catalog, inventory, install, remove, update, setEntryEnabled, t } = injected
+  const {
+    catalog, inventory, install, remove, update, setEntryEnabled, openStoreConfig,
+    subscribeProgress, subscribeInventoryChanged, t,
+  } = injected
 
   const [catalogRequest, setCatalogRequest] = useState(0)
   const [catalogState, setCatalogState] = useState<CatalogState>({ status: 'loading' })
@@ -67,7 +80,23 @@ export function PluginStoreSettingsTab(injected: PluginStoreSettingsTabProps): R
   const [query, setQuery] = useState('')
   const [busy, setBusy] = useState<Record<string, BundleMutation>>({})
   const [entryBusy, setEntryBusy] = useState<Record<string, boolean>>({})
+  const [configBusy, setConfigBusy] = useState(false)
   const [notice, setNotice] = useState<Notice | null>(null)
+  /** Latest progress line per mutation target (bundle name on the wire). */
+  const [progressByTarget, setProgressByTarget] = useState<Record<string, StoreMutationProgress>>({})
+  const settleTimers = useRef(new Set<ReturnType<typeof setTimeout>>())
+
+  useEffect(() => subscribeProgress((next) => {
+    setProgressByTarget(previous => ({ ...previous, [next.target]: next }))
+  }), [subscribeProgress])
+
+  useEffect(() => {
+    const timers = settleTimers.current
+    return () => {
+      for (const timer of timers) clearTimeout(timer)
+      timers.clear()
+    }
+  }, [])
 
   useEffect(() => {
     let current = true
@@ -110,6 +139,20 @@ export function PluginStoreSettingsTab(injected: PluginStoreSettingsTabProps): R
     setInventoryRequest(value => value + 1)
   }
 
+  // An import in the sibling tab mutates the same profile manifest this
+  // inventory reads, so the host-side success notifies a re-read here.
+  useEffect(() => subscribeInventoryChanged(() => { refreshInventory() }), [subscribeInventoryChanged])
+
+  // The patch layer recomposes hot after a toggle; a second read picks up the
+  // Loader state once that settles.
+  const scheduleSettleRefresh = (): void => {
+    const timer = setTimeout(() => {
+      settleTimers.current.delete(timer)
+      refreshInventory()
+    }, ENTRY_SETTLE_REFRESH_MS)
+    settleTimers.current.add(timer)
+  }
+
   const mutate = async (mutation: BundleMutation, packageName: string): Promise<void> => {
     setBusy(previous => ({ ...previous, [packageName]: mutation }))
     try {
@@ -117,8 +160,10 @@ export function PluginStoreSettingsTab(injected: PluginStoreSettingsTabProps): R
       const result = await operation(packageName)
       setNotice({ kind: result.ok ? 'success' : 'error', text: result.message })
       refreshInventory()
-    } catch {
-      setNotice({ kind: 'error', text: t('mutationFailed') })
+    } catch (error) {
+      // The host Remote failure carries the pnpm or validation diagnostic;
+      // a generic notice without it left every failed install unexplained.
+      setNotice({ kind: 'error', text: error instanceof Error ? error.message : t('mutationFailed') })
     } finally {
       setBusy((previous) => {
         return Object.fromEntries(Object.entries(previous).filter(([key]) => key !== packageName))
@@ -130,12 +175,25 @@ export function PluginStoreSettingsTab(injected: PluginStoreSettingsTabProps): R
     setEntryBusy(previous => ({ ...previous, [entryId]: true }))
     try {
       const result = await setEntryEnabled(entryId, enabled)
-      if (!result.ok) setNotice({ kind: 'error', text: result.message })
+      setNotice({ kind: result.ok ? 'success' : 'error', text: result.message })
       refreshInventory()
-    } catch {
-      setNotice({ kind: 'error', text: t('mutationFailed') })
+      if (result.ok) scheduleSettleRefresh()
+    } catch (error) {
+      setNotice({ kind: 'error', text: error instanceof Error ? error.message : t('mutationFailed') })
     } finally {
       setEntryBusy(previous => ({ ...previous, [entryId]: false }))
+    }
+  }
+
+  const openConfig = async (): Promise<void> => {
+    setConfigBusy(true)
+    try {
+      const result = await openStoreConfig()
+      setNotice({ kind: result.ok ? 'success' : 'error', text: result.message })
+    } catch (error) {
+      setNotice({ kind: 'error', text: error instanceof Error ? error.message : t('openConfigFailed') })
+    } finally {
+      setConfigBusy(false)
     }
   }
 
@@ -150,6 +208,25 @@ export function PluginStoreSettingsTab(injected: PluginStoreSettingsTabProps): R
 
   return (
     <div className={css.section} aria-busy={catalogState.status === 'loading' || inventoryState.status === 'loading'}>
+      <div className={css.toolbar}>
+        <button
+          type="button"
+          disabled={configBusy}
+          data-action="open-config"
+          onClick={() => { void openConfig() }}
+        >
+          {configBusy ? t('openingConfig') : t('openConfig')}
+        </button>
+      </div>
+      {notice !== null ? (
+        <p
+          className={css.notice}
+          role="status"
+          data-notice={notice.kind}
+        >
+          {notice.text}
+        </p>
+      ) : null}
       {catalogState.status === 'loading' ? <p className={css.status}>{t('loading')}</p> : null}
       {catalogState.status === 'error' ? (
         <div className={css.failure}>
@@ -182,25 +259,46 @@ export function PluginStoreSettingsTab(injected: PluginStoreSettingsTabProps): R
             <ul className={css.cards}>
               {filteredEntries.map((entry) => {
                 const isInstalled = installedNames.has(entry.name)
-                const pending = busy[entry.name] === 'install'
+                const pending = busy[entry.name]
+                const cardProgress = progressByTarget[entry.name]
                 const description = zhActive ? entry.descriptionZh : entry.description
                 return (
                   <li className={css.card} key={entry.name} data-store-entry={entry.name}>
                     <div className={css.cardContent}>
                       <strong className={css.cardTitle} title={entry.name}>{entry.name}</strong>
                       {isInstalled
-                        ? <span className={css.configTag} data-installed="true">{t('installedTag')}</span>
+                        ? (
+                          <div className={css.cardActions}>
+                            <span className={css.configTag} data-installed="true">{t('installedTag')}</span>
+                            <button
+                              type="button"
+                              disabled={pending !== undefined}
+                              data-action="uninstall"
+                              onClick={() => { void mutate('remove', entry.name) }}
+                            >
+                              {pending === 'remove' ? t('uninstalling') : t('uninstall')}
+                            </button>
+                          </div>
+                        )
                         : (
                           <button
                             type="button"
-                            disabled={pending}
+                            disabled={pending !== undefined}
                             data-action="install"
                             onClick={() => { void mutate('install', entry.name) }}
                           >
-                            {pending ? t('installing') : t('install')}
+                            {pending === 'install' ? t('installing') : t('install')}
                           </button>
                         )}
                     </div>
+                    {pending !== undefined ? (
+                      <div className={css.cardProgress} role="status" data-progress-target={entry.name}>
+                        <progress aria-label={t('progressLabel')} />
+                        {cardProgress !== undefined
+                          ? <p className={css.progressLine}>{cardProgress.line}</p>
+                          : <p className={css.progressLine}>{pending === 'remove' ? t('uninstalling') : t('installing')}</p>}
+                      </div>
+                    ) : null}
                     <div className={css.cardDetails}>
                       <p className={css.description}>{description}</p>
                       {entry.author !== '' ? <p className={css.meta}>{entry.author}</p> : null}
@@ -217,17 +315,6 @@ export function PluginStoreSettingsTab(injected: PluginStoreSettingsTabProps): R
           ) : null}
         </div>
       ) : null}
-
-      {notice !== null ? (
-        <p
-          className={css.notice}
-          role="status"
-          data-notice={notice.kind}
-        >
-          {notice.text}
-        </p>
-      ) : null}
-
       {inventoryState.status === 'error' ? (
         <div className={css.failure}>
           <p role="alert">{t('error')}</p>
@@ -294,19 +381,24 @@ export function PluginStoreSettingsTab(injected: PluginStoreSettingsTabProps): R
               <ul className={css.rows}>
                 {inventoryState.inventory.entries.map((entry) => {
                   const pending = entryBusy[entry.entryId] === true
+                  // The store layer only removes its own disable mark, so an
+                  // entry disabled elsewhere cannot be re-enabled from here.
+                  const locked = !entry.enabled && !entry.storeDisabled
                   return (
                     <li className={css.row} key={entry.entryId} data-entry-toggle={entry.entryId}>
                       <div className={css.rowIdentity}>
                         <strong className={css.cardTitle}>{entry.moduleName}</strong>
                         <span className={css.configTag} data-enabled={entry.enabled ? 'true' : 'false'}>
-                          {entry.enabled ? t('disable') : t('enable')}
+                          {entry.enabled ? t('enabledTag') : t('disabledTag')}
                         </span>
+                        {locked ? <span className={css.lockedHint}>{t('lockedHint')}</span> : null}
                       </div>
                       <button
                         type="button"
                         role="switch"
                         aria-checked={entry.enabled}
-                        disabled={pending}
+                        disabled={pending || locked}
+                        title={locked ? t('lockedHint') : undefined}
                         data-action="toggle"
                         onClick={() => { void toggleEntry(entry.entryId, !entry.enabled) }}
                       >
@@ -320,6 +412,7 @@ export function PluginStoreSettingsTab(injected: PluginStoreSettingsTabProps): R
           ) : null}
         </div>
       ) : null}
+
     </div>
   )
 }

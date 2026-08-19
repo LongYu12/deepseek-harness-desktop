@@ -62,6 +62,29 @@
   gap: 12px;
 }
 
+.toolbar {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.toolbar button {
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  padding: 4px 10px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.toolbar button:disabled {
+  color: var(--dsw-alias-label-tertiary);
+  cursor: default;
+}
+
 .search {
   position: relative;
   display: flex;
@@ -152,6 +175,40 @@
   text-align: left;
 }
 
+.cardProgress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-top: 1px solid var(--dsw-alias-border-l2);
+  padding: 8px 14px;
+  background: var(--dsw-alias-bg-module-platform);
+}
+
+.cardProgress progress {
+  flex: none;
+  width: 96px;
+  height: 4px;
+  accent-color: var(--dsw-alias-state-business-primary);
+}
+
+.progressLine {
+  min-width: 0;
+  overflow: hidden;
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cardActions {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+}
+
 .cardTitle {
   min-width: 0;
   overflow: hidden;
@@ -228,6 +285,12 @@
   font-size: 11px;
   line-height: 16px;
   white-space: nowrap;
+}
+
+.lockedHint {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 17px;
 }
 
 .rows {

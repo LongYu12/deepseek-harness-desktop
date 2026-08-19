@@ -6,6 +6,11 @@ directories:
 files:
   - lib/**/*
   - package.json
+# The local plugin-store index ships as a plain resource tree (no
+# node_modules, so the afterPack closure workaround does not apply).
+extraResources:
+  - from: ../../local-plugin-store
+    to: local-plugin-store
 # The deployed dsh backend closure ships through the afterPack hook instead
 # of extraResources: electron-builder's file filter unconditionally skips a
 # resource tree's root node_modules, which the closure cannot lose.

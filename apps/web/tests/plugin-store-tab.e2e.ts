@@ -1,13 +1,13 @@
 // Web e2e scenario: the plugin store tab in Plugins settings — the built-in
-// catalog cards with local search, and one install driven through the real
-// Remote down to the profile manifest, surfacing the restart hint a bundle
-// composition change produces. Zero model calls: everything is client state
-// plus the store gateway on a blank frame, so there is no fixture and a stray
-// stream would fail loud on the open llm seam. The pnpm subprocess itself is
-// the one stand-in: a keyless lane cannot reach an npm registry, so the fake
-// runner records the dependency the way `pnpm add` would and the real
-// reconciliation, manifest write, and restart flag run unchanged.
-import { readFileSync, writeFileSync } from 'node:fs'
+// catalog cards with local search, install/uninstall through the real Remote,
+// command-form import with live progress, and the header hot-reload action.
+// Zero model calls: everything is client state plus the store gateway on a
+// blank frame, so there is no fixture and a stray stream would fail loud on
+// the open llm seam. The pnpm subprocess itself is the one stand-in: a
+// keyless lane cannot reach an npm registry, so the fake runner records the
+// dependency the way `pnpm add` would and the real reconciliation, manifest
+// write, restart flag, and progress plumbing run unchanged.
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import type { Browser, Page } from 'playwright'
@@ -23,11 +23,54 @@ import { ZH_BROWSER_LOCALE, saveFailureShot } from './support.ts'
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/plugin-store-tab', import.meta.url))
 const TAB_EXPECTED = join(SNAPSHOT_DIR, 'tab.expected.md')
 const INSTALLED_EXPECTED = join(SNAPSHOT_DIR, 'installed.expected.md')
+const IMPORT_EXPECTED = join(SNAPSHOT_DIR, 'import.expected.md')
 const MODE = webSnapshotMode()
 
 /** The structural face of the running gateway this scenario steers. */
 interface PluginStoreGatewayUnderTest {
-  runner: (args: readonly string[], cwd: string) => { exitCode: number; stderr: string }
+  runner: (args: readonly string[], cwd: string, onProgress?: (line: string) => void) =>
+    | { exitCode: number; stderr: string }
+    | Promise<{ exitCode: number; stderr: string }>
+  /** Live profile recomposer; absent unless a scenario injects one. */
+  composer?: () => Promise<void>
+}
+
+/** A promise the scenario resolves when the fake pnpm should report success. */
+function deferredGate(): { promise: Promise<unknown>; resolve: () => void } {
+  let resolve!: () => void
+  const promise = new Promise<unknown>((done) => { resolve = () => done(undefined) })
+  return { promise, resolve }
+}
+
+/**
+ * A fake pnpm runner recording `add`/`remove` on the profile manifest and
+ * materializing a bundle-declaring package under node_modules — the probe the
+ * shared reconciler resolves — exactly where pnpm would put it. Progress
+ * lines stream synchronously; the verdict waits on the deferred so the busy
+ * surface stays observable.
+ */
+function installingRunner(
+  deferred: { promise: Promise<unknown>; resolve: () => void },
+): PluginStoreGatewayUnderTest['runner'] {
+  return (args, cwd, onProgress) => {
+    onProgress?.('Progress: resolved 42 packages')
+    onProgress?.('Progress: done')
+    const target = args[args.length - 1] ?? ''
+    const manifest = JSON.parse(readFileSync(join(cwd, 'package.json'), 'utf8')) as { dependencies?: Record<string, string> }
+    if (args[0] === 'remove') {
+      delete manifest.dependencies?.[target]
+    } else {
+      manifest.dependencies = { ...(manifest.dependencies ?? {}), [target]: '*' }
+      mkdirSync(join(cwd, 'node_modules', ...target.split('/')), { recursive: true })
+      writeFileSync(join(cwd, 'node_modules', ...target.split('/'), 'package.json'), `${JSON.stringify({
+        name: target,
+        version: '0.1.0',
+        dsh: { bundle: { patch: 'cordis.patch.yml' } },
+      }, undefined, 2)}\n`)
+    }
+    writeFileSync(join(cwd, 'package.json'), `${JSON.stringify(manifest, undefined, 2)}\n`)
+    return deferred.promise.then(() => ({ exitCode: 0, stderr: '' }))
+  }
 }
 
 describe('web e2e: plugin store tab', () => {
@@ -93,8 +136,9 @@ describe('web e2e: plugin store tab', () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-plugin-store-tab'))
     const dialog = await openStore()
 
-    // The shipped builtin index: the three official bundles, each installable.
-    expect(await dialog.locator('[data-store-entry]').count()).toBe(3)
+    // The shipped builtin index: the three official bundles plus the four
+    // curated community entries, each installable.
+    expect(await dialog.locator('[data-store-entry]').count()).toBe(7)
     for (const name of ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', '@deepseek-ai/dsh-headless']) {
       const card = dialog.locator(`[data-store-entry="${name}"]`)
       expect(await card.count(), name).toBe(1)
@@ -124,7 +168,7 @@ describe('web e2e: plugin store tab', () => {
     await search.fill('不存在的插件')
     await expect.poll(() => dialog.getByText('没有匹配的插件。').count(), { timeout: 5_000 }).toBe(1)
     await search.fill('')
-    await expect.poll(() => dialog.locator('[data-store-entry]').count(), { timeout: 5_000 }).toBe(3)
+    await expect.poll(() => dialog.locator('[data-store-entry]').count(), { timeout: 5_000 }).toBe(7)
     expect(tripwire.pageErrors).toEqual([])
   }, 60_000)
 
@@ -177,8 +221,115 @@ describe('web e2e: plugin store tab', () => {
     expect(tripwire.pageErrors).toEqual([])
   }, 60_000)
 
+  it('installs and uninstalls a community catalog plugin through the Remote', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-plugin-store-community'))
+    const dialog = await openStore()
+
+    // dshmarket is the first community entry of the extended builtin index.
+    const card = dialog.locator('[data-store-entry="dshmarket"]')
+    await expect.poll(() => card.count(), { timeout: 5_000 }).toBe(1)
+
+    // The keyless stand-in mirrors pnpm's `add`/`remove` on the profile
+    // manifest and materializes a bundle-declaring package under node_modules
+    // (the community package is outside the host's own dependency closure, so
+    // the fake makes it resolvable the way a real install would). Progress
+    // streams while the deferred gates the verdict, keeping the busy card
+    // observable.
+    const gateway = (scaffold.ctx as unknown as { pluginStore?: PluginStoreGatewayUnderTest }).pluginStore
+    if (gateway === undefined) throw new Error('plugin store gateway missing from the settled tree')
+    const deferred = deferredGate()
+    gateway.runner = installingRunner(deferred)
+
+    await card.getByRole('button', { name: '安装', exact: true }).click()
+    // The card streams the running pnpm's stderr lines until the verdict; the
+    // surface holds the latest line as lines arrive.
+    await expect
+      .poll(() => card.locator('[data-progress-target="dshmarket"]').getByText('Progress: done').count(), { timeout: 5_000 })
+      .toBe(1)
+    deferred.resolve()
+    await expect.poll(() => card.locator('[data-installed]').count(), { timeout: 10_000 }).toBe(1)
+    const row = dialog.locator('[data-bundle="dshmarket"]')
+    await expect.poll(() => row.count(), { timeout: 5_000 }).toBe(1)
+
+    // Uninstall from the card returns it to installable and the bundle row
+    // leaves the installed list once the refreshed inventory settles.
+    await card.getByRole('button', { name: '卸载', exact: true }).click()
+    await expect.poll(() => card.locator('[data-action="install"]').count(), { timeout: 10_000 }).toBe(1)
+    await expect.poll(() => row.count(), { timeout: 5_000 }).toBe(0)
+
+    // Durable state: the shared reconciler withdrew the bundle layer entry.
+    const manifest = JSON.parse(await readFile(join(profileDir, 'package.json'), 'utf8')) as {
+      dependencies: Record<string, string>
+      dsh: { profile: { bundles: string[] } }
+    }
+    expect(manifest.dependencies['dshmarket']).toBeUndefined()
+    expect(manifest.dsh.profile.bundles).not.toContain('dshmarket')
+    expect(tripwire.pageErrors).toEqual([])
+  }, 60_000)
+
+  it('imports a bundle from a pasted command and streams live progress', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-plugin-store-import'))
+    const dialog = await openStore()
+    await dialog.getByRole('tab', { name: '插件导入', exact: true }).click()
+    await expect
+      .poll(() => dialog.getByRole('tab', { name: '插件导入', exact: true }).getAttribute('aria-selected'), { timeout: 5_000 })
+      .toBe('true')
+
+    // A pasted CLI command for the running profile: the store parses it,
+    // guards the profile against the manifest name, and resolves the spec to
+    // the registry package. The keyless stand-in records the dependency and
+    // streams progress like the card installs do.
+    const gateway = (scaffold.ctx as unknown as { pluginStore?: PluginStoreGatewayUnderTest }).pluginStore
+    if (gateway === undefined) throw new Error('plugin store gateway missing from the settled tree')
+    const deferred = deferredGate()
+    gateway.runner = installingRunner(deferred)
+
+    const progress = dialog.locator('[data-progress="import"]')
+    await dialog.getByLabel('导入命令或导入目标').fill('dsh plugin --profile dsh-profile-scaffold add @linxin666/dsh-web-ui-all')
+    await dialog.getByRole('button', { name: '导入', exact: true }).click()
+
+    // The import surface streams the resolved target and the latest pnpm
+    // stderr line while the deferred gates the verdict.
+    await expect.poll(() => progress.getByText('@linxin666/dsh-web-ui-all').count(), { timeout: 5_000 }).toBe(1)
+    await expect.poll(() => progress.getByText('Progress: done').count(), { timeout: 5_000 }).toBe(1)
+    deferred.resolve()
+
+    // Success lands the bundle in the installed list and asks for a restart.
+    await expect
+      .poll(() => dialog.getByText('导入成功。').count(), { timeout: 10_000 })
+      .toBe(1)
+    await expect
+      .poll(() => dialog.getByText(/pnpm add @linxin666\/dsh-web-ui-all succeeded/).count(), { timeout: 10_000 })
+      .toBe(1)
+    // Back on the store tab, the imported bundle joins the installed list.
+    await dialog.getByRole('tab', { name: '插件商店', exact: true }).click()
+    const row = dialog.locator('[data-bundle="@linxin666/dsh-web-ui-all"]')
+    await expect.poll(() => row.count(), { timeout: 5_000 }).toBe(1)
+    await dialog.getByText('有插件变更需要重启 dsh 后生效。').first().waitFor({ timeout: 5_000 })
+
+    const snapshot = await captureStableAria(page, '[role="dialog"]', scaffold.workspaceCwd)
+    await compareOrRefreshGolden(IMPORT_EXPECTED, snapshot, MODE)
+    expect(tripwire.pageErrors).toEqual([])
+  }, 60_000)
+
+  it('hot-reloads the profile patch stack from the settings header', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-plugin-store-hot-reload'))
+    // The scaffold boots without a profile composer, so the scenario injects
+    // a live one to exercise the success lane of the header action.
+    const gateway = (scaffold.ctx as unknown as { pluginStore?: PluginStoreGatewayUnderTest }).pluginStore
+    if (gateway === undefined) throw new Error('plugin store gateway missing from the settled tree')
+    gateway.composer = async () => {}
+
+    const dialog = await openStore()
+    await dialog.getByRole('button', { name: '热重载', exact: true }).click()
+    await expect
+      .poll(() => dialog.getByRole('status').filter({ hasText: 'patch stack reapplied live' }).count(), { timeout: 5_000 })
+      .toBe(1)
+    expect(tripwire.pageErrors).toEqual([])
+  }, 60_000)
+
   it.skipIf(MODE === 'record')('keeps the fixture inventory closed', async () => {
     expect(tripwire.warnings).toEqual([])
-    await assertFixtureInventory(SNAPSHOT_DIR, ['tab.expected.md', 'installed.expected.md'])
+    await assertFixtureInventory(SNAPSHOT_DIR, ['tab.expected.md', 'installed.expected.md', 'import.expected.md'])
   })
 })

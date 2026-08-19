@@ -45,7 +45,7 @@ describe('native path opener', () => {
     ['distribution marker', { WSL_DISTRO_NAME: 'Ubuntu' }, '6.8.0-generic'],
     ['interop marker', { WSL_INTEROP: '/run/WSL/123_interop' }, '6.8.0-generic'],
     ['kernel release', {}, '5.15.153.1-microsoft-standard-WSL2'],
-  ])('hands WSL text documents to the Windows desktop from the %s', async (_label, env, osRelease) => {
+  ])('hands WSL text documents to a detached Windows Notepad from the %s', async (_label, env, osRelease) => {
     const requestSignal = signal()
     const run = vi.fn<PathOpenerRunner>(async command => command === 'wslpath'
       ? { stdout: '\\\\wsl.localhost\\Ubuntu\\home\\test user\\settings.yaml\r\n', stderr: '' }
@@ -60,7 +60,7 @@ describe('native path opener', () => {
         [
           '-NoProfile',
           '-Command',
-          "Invoke-Item -LiteralPath '\\\\wsl.localhost\\Ubuntu\\home\\test user\\settings.yaml'",
+          "Start-Process notepad.exe -ArgumentList '\\\\wsl.localhost\\Ubuntu\\home\\test user\\settings.yaml'",
         ],
         requestSignal,
       ],
@@ -97,12 +97,14 @@ describe('native path opener', () => {
     )
   })
 
-  it('uses the Windows desktop association for text documents', async () => {
+  it('bypasses Windows file associations for text documents with a detached Notepad', async () => {
+    // .yaml ordinarily carries no association: Invoke-Item then fails or opens
+    // the picker behind the application window, which reads as a dead button.
     const run = vi.fn<PathOpenerRunner>(async () => ({ stdout: '', stderr: '' }))
     await openNativeTextFile('C:\\work\\settings.yaml', signal(), { platform: 'win32', run })
     expect(run).toHaveBeenCalledWith(
       'powershell.exe',
-      ['-NoProfile', '-Command', "Invoke-Item -LiteralPath 'C:\\work\\settings.yaml'"],
+      ['-NoProfile', '-Command', "Start-Process notepad.exe -ArgumentList 'C:\\work\\settings.yaml'"],
       expect.any(AbortSignal),
     )
   })

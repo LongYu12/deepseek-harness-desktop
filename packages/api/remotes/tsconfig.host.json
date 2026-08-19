@@ -26,6 +26,9 @@
       "path": "../../credentials/credentials"
     },
     {
+      "path": "../../host/plugin-store"
+    },
+    {
       "path": "../../interaction/commands"
     },
     {

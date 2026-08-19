@@ -2,13 +2,17 @@
  * @deepseek-ai/dsh-host-plugin-store — plugin store Remote: catalog browsing
  * (builtin index, optionally overridden by a configured remote index URL),
  * profile bundle lifecycle (install/remove/update through pnpm plus the
- * shared `dsh.profile.bundles` reconciliation), and entry enablement through
- * the store-owned `cordis.store.patch.yml` layer. Bundle composition changes
- * apply at the next process boot; enablement applies hot through the patch
- * layer's HMR watch.
+ * shared `dsh.profile.bundles` reconciliation), command-form import
+ * (`dsh plugin [--profile <name>] add <spec>` resolving guarded registry,
+ * git, and tarball targets), and entry enablement through the store-owned
+ * `cordis.store.patch.yml` layer, plus the profile user patch layer's config
+ * shortcut (materialize and open it in a text editor). Mutations stream pnpm
+ * stderr as `plugin-store/progress` events; bundle composition changes apply
+ * at the next process boot or live through the injected composer
+ * (`hotReload`); enablement applies hot through the patch layer's HMR watch.
  */
 
-import { readFileSync, unlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
@@ -16,6 +20,8 @@ import type {} from '@deepseek-ai/cordis-plugin-loader'
 import * as yaml from 'js-yaml'
 import z from '@deepseek-ai/schemastery'
 import {
+  PROFILE_COMPOSE_KEY,
+  PROFILE_PATCH_FILENAME,
   PROFILE_STORE_PATCH_FILENAME,
   readProfileManifest,
   reconcileBundles,
@@ -23,11 +29,19 @@ import {
   writeProfileManifest,
   type ProfileManifest,
 } from '@deepseek-ai/dsh-app-boot'
+import { openNativeTextFile } from '@deepseek-ai/dsh-native-command'
 import { TypertRemoteService, Remote } from '@deepseek-ai/dsh-typert-protocol'
 // Typert-generated ./typert and ./remote artifacts import Zod at runtime.
 import type {} from 'zod'
 import { loadStoreCatalog } from './catalog.ts'
-import { assertRegistryPackageName, spawnPnpm, type PnpmRunner } from './pnpm.ts'
+import {
+  assertRegistryPackageName,
+  parsePluginImportCommand,
+  resolveImportSpec,
+  spawnPnpm,
+  spawnPnpmStreaming,
+  type PnpmRunner,
+} from './pnpm.ts'
 import type {
   PluginStoreInventory,
   StoreCatalog,
@@ -43,6 +57,12 @@ const NAME = 'plugin-store'
 
 /** Remote catalog fetch timeout when the config leaves it unset. */
 export const DEFAULT_FETCH_TIMEOUT_MS = 10_000
+
+/** Native-open bound for the config shortcut: the launcher must take the path or fail. */
+export const OPEN_CONFIG_TIMEOUT_MS = 15_000
+
+/** Seed written when the profile user patch layer does not exist yet. */
+const USER_PATCH_LAYER_SEED = '# dsh user patch layer: rows compose over the boot tree; see docs/cordis-primer.md.\n[]\n'
 
 /** Absolute path of this package's own manifest (the workspace bundle-resolution anchor). */
 const INSTALL_ANCHOR = fileURLToPath(new URL('../package.json', import.meta.url))
@@ -74,12 +94,21 @@ export class PluginStoreGateway extends TypertRemoteService {
 
   private readonly indexUrl: string | undefined
   private readonly fetchTimeoutMs: number
-  /** The `dsh.profile.bundles` list this process booted with. */
-  private readonly bootBundles: readonly string[]
+  /** The `dsh.profile.bundles` list this process booted with (or live-applied). */
+  private bootBundles: readonly string[]
   /** pnpm runner; tests substitute a fake before invoking mutations. */
-  runner: PnpmRunner = spawnPnpm
+  runner: PnpmRunner = (args, cwd, onProgress) =>
+    onProgress === undefined ? spawnPnpm(args, cwd) : spawnPnpmStreaming(args, cwd, onProgress)
   /** Catalog fetch implementation; tests substitute a fake. */
   fetchImpl: typeof fetch | undefined = undefined
+  /** Text-editor handoff for the config shortcut; tests substitute a fake. */
+  openTextFile: (path: string, signal: AbortSignal) => Promise<void> = openNativeTextFile
+  /**
+   * Live profile recomposer injected by the booted surface: reapply the full
+   * patch stack after a bundle-layer mutation. Absent on non-profile boots
+   * and in tests, where mutations keep their restart flag.
+   */
+  composer: (() => Promise<void>) | undefined
 
   constructor(ctx: Context, config: Config = {}) {
     super(ctx, 'pluginStore')
@@ -88,6 +117,7 @@ export class PluginStoreGateway extends TypertRemoteService {
     this.indexUrl = config.indexUrl === undefined || config.indexUrl === '' ? undefined : config.indexUrl
     this.fetchTimeoutMs = config.fetchTimeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS
     this.bootBundles = this.snapshotBootBundles()
+    this.composer = ctx.get(PROFILE_COMPOSE_KEY) as (() => Promise<void>) | undefined
   }
 
   /**
@@ -124,7 +154,10 @@ export class PluginStoreGateway extends TypertRemoteService {
       entries.push({
         entryId: entry.id,
         moduleName: entry.options.name,
-        enabled: !entry.disabled,
+        // The store mark is projected onto the Loader state immediately: an
+        // unapplied mark settles through the patch layer's HMR recomposition,
+        // and callers need the store's truth the moment the write returns.
+        enabled: !entry.disabled && !storeDisabled.has(entry.id),
         storeDisabled: storeDisabled.has(entry.id),
       })
     }
@@ -150,7 +183,40 @@ export class PluginStoreGateway extends TypertRemoteService {
   // reserves bare `install` and `remove` on every namespace service.
   @Remote('installBundle')
   async installBundle(packageName: string): Promise<StoreMutationResult> {
-    return this.runPnpmMutation(['add', packageName], packageName)
+    return this.runPnpmMutation(['add', packageName], packageName, packageName)
+  }
+
+  /**
+   * Import a plugin into the profile (`pnpm add <spec>`) and reconcile the
+   * bundle layer list against the installed state. The input is either a
+   * full import command (`dsh plugin [--profile <name>] add <spec>`) or a
+   * bare spec; the spec resolves to a guarded registry name, git repository
+   * form, or https tarball URL (`.tar.gz`). A command naming a different
+   * profile than the running one is rejected — the store only mutates the
+   * profile it booted on. Registry targets install by name; git and tarball
+   * targets install by spec, with the bundle check after pnpm resolves the
+   * package name.
+   * @param input - the import command or bare spec.
+   * @returns the mutation outcome; `restartNeeded` when the import is a bundle.
+   */
+  @Remote('importBundle')
+  async importBundle(input: string): Promise<StoreMutationResult> {
+    const command = parsePluginImportCommand(input)
+    if (command.profile !== undefined) {
+      const runningProfile = readProfileManifest(NAME, this.profileDir()).name
+      if (runningProfile !== command.profile) {
+        throw new Error(
+          `${NAME}: import command targets profile ${JSON.stringify(command.profile)} `
+          + `but the running profile is ${JSON.stringify(runningProfile)} — the store only mutates its own profile`,
+        )
+      }
+    }
+    const resolved = resolveImportSpec(command.spec)
+    return this.runPnpmMutation(
+      ['add', resolved.spec],
+      resolved.kind === 'registry' ? resolved.spec : undefined,
+      resolved.spec,
+    )
   }
 
   /**
@@ -161,7 +227,7 @@ export class PluginStoreGateway extends TypertRemoteService {
    */
   @Remote('removeBundle')
   async removeBundle(packageName: string): Promise<StoreMutationResult> {
-    return this.runPnpmMutation(['remove', packageName], packageName)
+    return this.runPnpmMutation(['remove', packageName], packageName, packageName)
   }
 
   /**
@@ -173,7 +239,7 @@ export class PluginStoreGateway extends TypertRemoteService {
    */
   @Remote('updateBundle')
   async updateBundle(packageName: string): Promise<StoreMutationResult> {
-    return this.runPnpmMutation(['update', packageName], packageName)
+    return this.runPnpmMutation(['update', packageName], packageName, packageName)
   }
 
   /**
@@ -189,13 +255,13 @@ export class PluginStoreGateway extends TypertRemoteService {
   setEntryEnabled(entryId: string, enabled: boolean): Promise<StoreMutationResult> {
     try {
       return Promise.resolve(this.applyEntryEnablement(entryId, enabled))
-    } catch (error) {
-      // The async predecessor rejected here; keep validation failures async too.
-      return Promise.reject(error)
+    } catch (error: unknown) {
+      // Keep validation failures async like the mutation-path rejections.
+      return Promise.reject(error instanceof Error ? error : new Error(String(error)))
     }
   }
 
-  /** Synchronous core of {@link setEntryEnabled}; the Remote wrapper adds the promise. */
+  /** Synchronous core of {@link setEntryEnabled}; the Remote wrapper keeps validation failures async. */
   private applyEntryEnablement(entryId: string, enabled: boolean): StoreMutationResult {
     const profileDir = this.profileDir()
     if (![...this.ctx.loader.entries()].some(entry => entry.id === entryId)) {
@@ -217,6 +283,56 @@ export class PluginStoreGateway extends TypertRemoteService {
       restartNeeded: false,
       message: `${enabled ? 'enabled' : 'disabled'} ${entryId} in ${PROFILE_STORE_PATCH_FILENAME}`,
     }
+  }
+
+  /**
+   * Re-run the booted surface's live profile composer — re-read and reapply
+   * the full patch stack without restarting the process. The composer is
+   * absent on non-profile boots and in tests, where mutations keep their
+   * restart flag instead.
+   * @returns the outcome; `restartNeeded` when no composer exists or the
+   * apply failed, so a restart is the only way to apply pending changes.
+   */
+  @Remote('hotReload')
+  async hotReload(): Promise<StoreMutationResult> {
+    if (this.composer === undefined) {
+      return {
+        ok: false,
+        restartNeeded: true,
+        message: `${NAME}: no live composer on this host — restart the process to apply changes`,
+      }
+    }
+    try {
+      await this.composer()
+      return { ok: true, restartNeeded: false, message: `${NAME}: patch stack reapplied live — no restart needed` }
+    } catch (error) {
+      return {
+        ok: false,
+        restartNeeded: true,
+        message: `${NAME}: live apply failed — ${error instanceof Error ? error.message : String(error)}; restart the process to apply changes`,
+      }
+    }
+  }
+
+  /**
+   * Materialize the profile's user patch layer (`cordis.patch.yml`) and open
+   * it in a text editor — the configuration shortcut for store tunables such
+   * as `indexUrl`, which a `{ id: plugin-store, config: { ... } }` row there
+   * overrides. An absent layer file is seeded with an empty row list first.
+   * @returns the mutation outcome; the message names the opened file.
+   * @throws when the host booted without a profile.
+   */
+  @Remote('openStoreConfig')
+  async openStoreConfig(): Promise<StoreMutationResult> {
+    const profileDir = this.profileDir()
+    const path = join(profileDir, PROFILE_PATCH_FILENAME)
+    if (!existsSync(path)) writeFileSync(path, USER_PATCH_LAYER_SEED)
+    try {
+      await this.openTextFile(path, AbortSignal.timeout(OPEN_CONFIG_TIMEOUT_MS))
+    } catch (error) {
+      return { ok: false, restartNeeded: false, message: `failed to open ${path}: ${error instanceof Error ? error.message : String(error)}` }
+    }
+    return { ok: true, restartNeeded: false, message: `opened ${path}` }
   }
 
   /** The boot-time bundle list: read once at activation; mutations compare against it. */
@@ -278,13 +394,33 @@ export class PluginStoreGateway extends TypertRemoteService {
    * Run one pnpm mutation in the profile directory, then reconcile
    * `dsh.profile.bundles` through the shared core. The restart flag follows
    * bundle membership: a bundle join/leave/version swap only composes at the
-   * next boot, while a plain dependency touches no composition.
+   * next boot, while a plain dependency touches no composition. Every live
+   * pnpm stderr line is emitted as `plugin-store/progress`, keyed on the
+   * resolved target so consumers can attach lines to the surface that
+   * started the mutation.
+   * @param args - pnpm arguments.
+   * @param packageName - the registry package name, or undefined for a git or
+   * tarball import whose package name is only known after pnpm resolves it.
+   * @param target - the mutation's resolved target (registry name, git spec,
+   * or tarball URL), carried on every progress event.
    */
-  private async runPnpmMutation(args: readonly string[], packageName: string): Promise<StoreMutationResult> {
-    assertRegistryPackageName(packageName)
+  private async runPnpmMutation(
+    args: readonly string[],
+    packageName: string | undefined,
+    target: string,
+  ): Promise<StoreMutationResult> {
+    if (packageName !== undefined) assertRegistryPackageName(packageName)
     const profileDir = this.profileDir()
     const before = readProfileManifest(NAME, profileDir)
-    const result = await this.runner(args, profileDir)
+    const operation = args[0] === 'remove' ? 'remove' : args[0] === 'update' ? 'update' : 'add'
+    const result = await this.runner(args, profileDir, (line) => {
+      try {
+        this.ctx.emit('plugin-store/progress', { operation, target, line })
+      } catch {
+        // Progress is a display surface: a throwing observer must not abort
+        // the pnpm mutation that is producing the lines.
+      }
+    })
     if (result.exitCode !== 0) {
       const message = result.exitCode === 127
         ? 'pnpm not found on PATH — install pnpm to manage store plugins'
@@ -294,13 +430,33 @@ export class PluginStoreGateway extends TypertRemoteService {
     const after = readProfileManifest(NAME, profileDir)
     const reconciled = reconcileBundles(before, after, name => this.exportsPatch(name, profileDir))
     if (reconciled.manifest !== undefined) writeProfileManifest(profileDir, reconciled.manifest)
+    const beforeBundles = before.dsh?.profile?.bundles ?? []
     const finalBundles = reconciled.manifest?.dsh?.profile?.bundles ?? after.dsh?.profile?.bundles ?? []
-    const restartNeeded = finalBundles.includes(packageName)
-      || (before.dsh?.profile?.bundles ?? []).includes(packageName)
+    // A registry mutation keys the flag on the named package; a git import
+    // has no advance name, so any bundle-list change means a boot-time
+    // composition change.
+    const restartNeeded = packageName !== undefined
+      ? finalBundles.includes(packageName) || beforeBundles.includes(packageName)
+      : !sameBundleList(beforeBundles, finalBundles)
     const additions = reconciled.nonBundleAdditions.length > 0
       ? ` (${reconciled.nonBundleAdditions.join(', ')} declares no dsh.bundle — installed as a plain dependency)`
       : ''
-    return { ok: true, restartNeeded, message: `pnpm ${args.join(' ')} succeeded${additions}` }
+    let message = `pnpm ${args.join(' ')} succeeded${additions}`
+    if (restartNeeded && this.composer !== undefined) {
+      try {
+        // Live apply: re-read and reapply the full patch stack through the
+        // booted surface's composer. The running tree then carries the new
+        // bundle layer, so the mutation needs no restart; only a failed
+        // apply keeps the flag (the message names the failure for a restart
+        // or a re-run).
+        await this.composer()
+        this.bootBundles = finalBundles
+        return { ok: true, restartNeeded: false, message: `${message} (applied live; no restart needed)` }
+      } catch (error) {
+        message += ` (live apply failed: ${error instanceof Error ? error.message : String(error)}; a restart applies it)`
+      }
+    }
+    return { ok: true, restartNeeded, message }
   }
 
   /** Read the store patch layer: missing file means no rows. */
@@ -347,6 +503,11 @@ export class PluginStoreGateway extends TypertRemoteService {
 function tail(stderr: string): string {
   const lines = stderr.split('\n').map(line => line.trimEnd()).filter(line => line.length > 0)
   return lines.slice(-3).join('\n') || 'no stderr captured'
+}
+
+/** Whether two bundle lists carry the same packages in the same order. */
+function sameBundleList(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((name, index) => name === right[index])
 }
 
 export default PluginStoreGateway

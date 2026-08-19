@@ -35,7 +35,11 @@ export interface StoreInventoryEntry {
   readonly entryId: string
   /** Exact module specifier imported by the Loader entry. */
   readonly moduleName: string
-  /** Effective Loader enablement, including disabled ancestor groups. */
+  /**
+   * Effective enablement: the Loader state with the store layer's mark
+   * applied, so a fresh mark reads back disabled before the patch layer's
+   * HMR recomposition settles it on the Loader.
+   */
   readonly enabled: boolean
   /** Disabled by the store patch layer (as opposed to any other layer). */
   readonly storeDisabled: boolean
@@ -56,4 +60,28 @@ export interface StoreMutationResult {
   readonly restartNeeded: boolean
   /** Human-readable outcome; pnpm's tail diagnostic on failure. */
   readonly message: string
+}
+
+/** One live pnpm stderr line during a store mutation. */
+export interface StoreMutationProgress {
+  /** The pnpm subcommand running the mutation. */
+  readonly operation: 'add' | 'remove' | 'update'
+  /** The mutation's resolved target: registry name, git spec, or tarball URL. */
+  readonly target: string
+  /** One non-empty pnpm stderr line (pnpm's progress surface). */
+  readonly line: string
+}
+
+declare module '@deepseek-ai/cordis' {
+  interface Events {
+    /**
+     * One pnpm stderr line while a store mutation runs. Consumers key on
+     * {@link StoreMutationProgress.target} to attach the line to the card or
+     * field that started it; observer failures are contained and cannot abort
+     * the running pnpm mutation.
+     * @param progress - the current line and its mutation context.
+     * @mode emit
+     */
+    'plugin-store/progress'(progress: StoreMutationProgress): void
+  }
 }
