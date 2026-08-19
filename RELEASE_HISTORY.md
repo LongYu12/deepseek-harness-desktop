@@ -13,6 +13,28 @@ DeepSeek Harness 桌面应用（`apps/desktop`，`@deepseek-ai/dsh-desktop`）�
 - pre-push hook 会跑全仓 `pnpm run typecheck`，推送 tag 前确保其通过。
 - 发版提交沿用 `chore(release): desktop v<version>` 格式。
 
+## v1.0.8 — 2026-08-19
+
+状态：待发布
+
+### 新功能
+
+- 插件热重载：插件页右上角「热重载」按钮，store patch 层变更立即生效，无需重启应用（`HotReloadAction`）。
+- 插件导入 tab：支持 `dsh plugin [--profile <name>] add <spec>` 完整命令，或直接粘贴 registry 包名（如 `dshmarket`）、GitHub 仓库（`owner/repo`、`git+https://...`、`.git` 结尾链接）以及 `.tar.gz` 链接；安装进度实时展示（progress 事件）。
+- 社区目录卡片：`local-plugin-store/` 本地商店索引内置 dshmarket、dsh-web-ui-all、dsh-usage-stats、dsh-skin-market 等社区插件卡片，随安装器分发。
+- 路径打开能力重构：native path opener 从 host/apiproxy 迁移到 `packages/util/native-command`，Windows 无控制台宿主下不弹黑窗。
+
+### 修复与收尾
+
+- profile 组合测试覆盖导入命令解析与热重载路径。
+
+### 发版清单
+
+- [ ] 安装器 `dsh-setup-1.0.8-win-x64.exe` 构建完成
+- [ ] tag `desktop-v1.0.8` 推送 origin
+- [ ] GitHub Release「Desktop v1.0.8」创建并上传安装器
+- [ ] 本节状态更新为已发布，补充 Release 链接与产物字节数
+
 ## v1.0.2 — 2026-08-17
 
 状态：构建发版中
