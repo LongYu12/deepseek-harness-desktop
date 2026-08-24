@@ -572,7 +572,12 @@ describe('HotReloadAction', () => {
   function renderAction(overrides: Partial<HotReloadActionInjected> = {}): { hotReload: ReturnType<typeof vi.fn> } {
     const fallback = vi.fn<HotReloadActionInjected['hotReload']>().mockResolvedValue(OK_MUTATION)
     const hotReload = overrides.hotReload ?? fallback
-    render(<HotReloadAction {...({ t: enT, hotReload } as unknown as HotReloadActionProps)} />)
+    const restartApp = overrides.restartApp
+    render(
+      <HotReloadAction
+        {...({ t: enT, hotReload, ...(restartApp === undefined ? {} : { restartApp }) } as unknown as HotReloadActionProps)}
+      />,
+    )
     return { hotReload: hotReload as unknown as ReturnType<typeof vi.fn> }
   }
 
@@ -607,5 +612,20 @@ describe('HotReloadAction', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: en.hotReload }))
     await waitFor(() => { expect(screen.getByRole('alert')?.textContent).toBe(en.hotReloadFailed) })
+  })
+
+  it('restarts the desktop app when a restart is the only way to apply', async () => {
+    // The desktop shell path shows the restarting notice and fires the shell
+    // restart; the renderer is expected to tear down, so the rejection is
+    // swallowed by the component.
+    const restartApp = vi.fn<() => Promise<void>>().mockRejectedValue(new Error('renderer disposed'))
+    renderAction({
+      hotReload: vi.fn<HotReloadActionInjected['hotReload']>()
+        .mockResolvedValue({ ok: false, restartNeeded: true, message: 'no live composer' }),
+      restartApp,
+    })
+    fireEvent.click(screen.getByRole('button', { name: en.hotReload }))
+    await waitFor(() => { expect(screen.getByRole('status')?.textContent).toBe(en.restarting) })
+    expect(restartApp).toHaveBeenCalledTimes(1)
   })
 })

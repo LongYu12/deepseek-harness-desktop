@@ -4,7 +4,7 @@
 
 ## 本发行版新增功能（相对官方 DeepSeek Harness）
 
-> 本仓库在官方 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 基础上扩展，新增以下功能模块，随 Windows 桌面版（v1.0.8）与 Web UI 一起交付。
+> 本仓库在官方 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 基础上扩展，新增以下功能模块，随 Windows 桌面版（v1.0.9）与 Web UI 一起交付。
 
 ### 桌面版应用与欢迎界面
 
@@ -36,7 +36,7 @@
 
 ### 更多增强
 
-- **插件热重载**：插件页右上角一键重载，store patch 层变更立即生效，无需重启应用。
+- **插件热重载**：插件页右上角一键重载，store patch 层变更立即生效；桌面端在需要重启生效时自动重启应用（通过应用自身 exe 路径）。
 - **会话头部余额胶囊**：展示 provider 余额查询结果。
 - **一键发版工具链**：`发布桌面版Release.bat`（即 `scripts/release-desktop.ps1`）。
 

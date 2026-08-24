@@ -5,6 +5,7 @@ import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { StoreMutationProgress } from '@deepseek-ai/dsh-api-remotes/client'
 import { HotReloadAction, type HotReloadActionInjected } from './HotReloadAction.tsx'
+import { desktopShell } from './desktop-shell.ts'
 import { PluginImportTab, type PluginImportTabInjected } from './PluginImportTab.tsx'
 import { PluginStoreSettingsTab, type PluginStoreSettingsTabInjected } from './PluginStoreSettingsTab.tsx'
 import { en, zh, type PluginStoreLocaleKey } from './locales.ts'
@@ -102,13 +103,16 @@ export function apply(ctx: ClientContext): void {
     if (!result.ok) throw failure('hotReload', result.error)
     return result.value
   }
+  // The desktop shell (Electron preload) restarts the app when the host
+  // reports a restart is the only way to apply pending changes.
+  const restartApp = desktopShell()?.restartApp
 
   ctx.slots.inject('settings.action', () => ctx.slots.register({
     name: 'settings.action',
     id: 'plugin-store-hot-reload',
     order: 10,
     locale: NS,
-    inject: () => ({ hotReload }),
+    inject: () => ({ hotReload, ...(restartApp === undefined ? {} : { restartApp }) }),
   }, HotReloadAction))
 
   ctx.slots.inject('settings.plugins.tab', () => ctx.slots.register({

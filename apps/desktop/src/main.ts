@@ -10,7 +10,7 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { app, BrowserWindow, dialog, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 
 /**
  * Readiness handshake: the web app prints its bound URL once every row has
@@ -189,6 +189,8 @@ function createWindow(url: string): void {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      // The sandboxed preload bridges the restart request to the main process.
+      preload: join(here, 'preload.cjs'),
     },
   })
   // The UI opens external links in the system browser, never in-shell.
@@ -198,6 +200,21 @@ function createWindow(url: string): void {
   })
   mainWindow.once('closed', () => { mainWindow = undefined })
   void mainWindow.loadURL(url)
+}
+
+/**
+ * Restart the desktop app through its own executable path: stop the spawned
+ * children (backend, local store), then relaunch so the next instance starts
+ * only after this one has fully exited.
+ */
+function registerRestartHandler(): void {
+  ipcMain.handle('dsh:restart-app', () => {
+    const exePath = app.getPath('exe')
+    backend.stop()
+    storeServer.stop()
+    app.relaunch({ execPath: exePath })
+    app.quit()
+  })
 }
 
 /** Surface a startup failure and exit non-zero. */
@@ -219,6 +236,8 @@ if (!app.requestSingleInstanceLock()) {
     if (mainWindow.isMinimized()) mainWindow.restore()
     mainWindow.focus()
   })
+
+  registerRestartHandler()
 
   void app.whenReady().then(() => {
     const bin = backendBinPath()
