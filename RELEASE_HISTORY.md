@@ -13,6 +13,20 @@ DeepSeek Harness 桌面应用（`apps/desktop`，`@deepseek-ai/dsh-desktop`）�
 - pre-push hook 会跑全仓 `pnpm run typecheck`，推送 tag 前确保其通过。
 - 发版提交沿用 `chore(release): desktop v<version>` 格式。
 
+## v1.0.9 — 2026-08-24（已发布）
+
+tag `desktop-v1.0.9`；Release「Desktop v1.0.9」（https://github.com/LongYu12/deepseek-harness-desktop/releases/tag/desktop-v1.0.9）。
+安装器 `dsh-setup-1.0.9-win-x64.exe`，143,826,148 字节，与远端校验一致。
+
+### 新功能
+
+- 桌面端热重载自动重启：插件页右上角「热重载」在无法 live 生效（如 bundle 启动期组合变更）时，通过应用自身 exe 路径（`app.getPath('exe')` + `app.relaunch`）自动重启桌面应用，不再需要手动重启（`apps/desktop/src/preload.cts` + `HotReloadAction`）。
+
+### 修复与收尾
+
+- 桌面壳新增 renderer→main 桥（contextBridge `desktopShell.restartApp`），为后续壳能力提供扩展点。
+- HotReloadAction 组件测试新增桌面端重启路径用例。
+
 ## v1.0.8 — 2026-08-19（已发布）
 
 tag `desktop-v1.0.8`；Release「Desktop v1.0.8」（https://github.com/LongYu12/deepseek-harness-desktop/releases/tag/desktop-v1.0.8）。
